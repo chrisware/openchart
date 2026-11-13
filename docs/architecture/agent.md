@@ -410,17 +410,15 @@ ToolPart, and their terminal states into native `SUBAGENT_STARTED`,
 `SUBAGENT_FINISHED`, and `SUBAGENT_ERROR`. The parent delegating Part ID serves as one
 invocation's `subagentRunId`, and the child Session's title is the display name;
 `parentToolCallId` links the parent tool, and `parentSubagentRunId` expresses nesting.
-Child content keeps its own Session projection and is also sent, with native ownership
-fields, to observers of ancestor Sessions. Child input stays only in the separate child
-session. Session/Run/Permission state keeps its original scope; child message
-completion info is merged into the messageInfo of the parent's observed document. A
-child Assistant finishing one turn does not end the card; only the parent ToolPart's
-completed/error ends the whole invocation. Bootstrap reads the linked child
-transcripts, restores ownership message by message, and uses the same native lifecycle
-events to restore child cards. The tree read reuses the root transcript already loaded
-by the snapshot, and combines the tree's messageInfo with the root Session state
-directly; a history replacement projects the most recent complete-turn window
-separately for each observer. Delegates linked within a page also each read only their
+Child content stays in its own Session projection; ancestor observers receive only
+the delegate lifecycle and the parent ToolPart's own Activity. Child input also stays
+in the separate child session, and Session/Run/Permission state keeps its original
+scope. A child Assistant finishing one turn does not end the card; only the parent
+ToolPart's completed/error ends the whole invocation. Bootstrap reads the linked child
+transcripts for titles and nested links, but each observer's message projection
+contains only its own Session history. The tree read reuses the root transcript
+already loaded by the snapshot; a history replacement projects the most recent
+complete-turn window separately for each observer. Delegates linked within a page also each read only their
 latest page into that page; every transcript read is the same paginated read, with no
 whole-transcript read entry. Processor, Publisher.Change, the database schema, and
 provider protocols stay unchanged.
@@ -635,14 +633,12 @@ A minimal patch to the converter keeps regular Activities as data parts; the App
 `assistant-ui-messages.ts` links tool activities to their original tool cards by
 toolCallId, and other Activities use a generic display. The patch source and removal
 conditions are recorded in `patches/README.md`.
-Native subagent subscriber hooks keep only the invocation's start/end events; content
-is still merged entirely by the SDK. The frontend first groups by subagentRunId, then
-calls the same community converter, and links the parent tool through
+Native subagent subscriber hooks keep only the invocation's start/end events; child
+content is never projected into the parent. The frontend links the parent tool through
 parentToolCallId. Regular tools use the official Elements ToolCall; calls with
 subagent ownership use the official TaskCard, which shows only the title and child
-call status, not the returned result or error body. Child messages stay in the
-conversion result but do not take part in the parent session's reply-action
-selection; the card does not mount an inline child session. Clicking the card opens
+call status, not the returned result or error body. The card does not mount an inline
+child session. Clicking the card opens
 the existing Session using the tool Activity's childSessionId, reusing AgentPanel;
 subagentRunId only identifies the invocation and is not a Session ID. The child panel
 observes the full session independently; clicking does not create or rerun the task.

@@ -22,6 +22,7 @@ import type { SessionStore } from "@openchart/app/lib/agent/session-store";
 import type { ComposerDraft } from "@openchart/app/lib/prompt-converter/converter";
 
 import { convertMessages } from "./assistant-ui-messages";
+import type { MessageConversionCache } from "./assistant-ui-user-parts";
 import { toAssistantUiMessage } from "./assistant-ui-message-metadata";
 import { useSessionSnapshot } from "@openchart/app/lib/agent/use-session-snapshot";
 
@@ -176,6 +177,7 @@ export function useAssistantUiRuntime({
   const sessionHandle = agent.getSession(sessionID);
   const running = isSessionRunning(snapshot.state);
   const previousMessages = useRef<ThreadMessageLike[]>([]);
+  const conversionCache = useRef<MessageConversionCache>(new Map());
   const messages = useMemo(
     () =>
       // Reuse the framework's structural sharing, then let assistant-ui's
@@ -187,6 +189,8 @@ export function useAssistantUiRuntime({
           running,
           snapshot.subagents,
           snapshot.state?.messageInfo,
+          undefined,
+          conversionCache.current,
         ),
       ),
     [
