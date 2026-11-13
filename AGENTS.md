@@ -13,6 +13,7 @@ AGENTS.md and [architecture](docs/architecture/code-organization.md) before edit
   [Effect's guide](node_modules/effect/AGENTS.md).
 - Read [app/DESIGN.md](app/DESIGN.md) before UI changes. Use Computer Use for
   desktop verification. Draw diagrams in fenced Mermaid blocks.
+- Git workflow: [git-workflow](docs/architecture/git-workflow.md).
 
 ## Commands and documentation
 
