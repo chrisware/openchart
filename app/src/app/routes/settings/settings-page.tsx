@@ -8,6 +8,7 @@ import {
   ScrollText,
   SlidersHorizontal,
   UserRound,
+  Wrench,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -27,6 +28,7 @@ export const settingsSections = [
   { path: "/app/settings/interface", title: "Appearance", icon: Palette },
   { path: "/app/settings/alerts", title: "Alerts", icon: Bell },
   { path: "/app/settings/models", title: "Models", icon: SlidersHorizontal },
+  { path: "/app/settings/tools", title: "Tools", icon: Wrench },
   { path: "/app/settings/providers", title: "Data Providers", icon: Database },
   { path: "/app/settings/changelog", title: "Changelog", icon: ScrollText },
 ] as const;

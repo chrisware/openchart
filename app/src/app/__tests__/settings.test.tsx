@@ -14,6 +14,7 @@ import {
   RefreshProviders,
 } from "@openchart/app/app/routes/settings/native-provider";
 import { ApiProviderSettings } from "@openchart/app/app/routes/settings/api-provider";
+import McpSettings from "@openchart/app/app/routes/settings/mcp";
 import { useConfig } from "@openchart/app/hooks/use-config";
 import { createTransport } from "@openchart/app/lib/transport/transport";
 
@@ -31,6 +32,15 @@ const rpc = vi.hoisted(() => ({
     startSetup: { mutate: vi.fn() },
     writeSetup: { mutate: vi.fn() },
     cancelSetup: { mutate: vi.fn() },
+  },
+  mcp: {
+    list: { query: vi.fn() },
+    status: { query: vi.fn() },
+    refresh: { mutate: vi.fn() },
+    setServer: { mutate: vi.fn() },
+    removeServer: { mutate: vi.fn() },
+    setSecrets: { mutate: vi.fn() },
+    clearSecrets: { mutate: vi.fn() },
   },
 }));
 vi.mock("@openchart/app/app/routes/settings/settings-page", () => ({
@@ -547,4 +557,54 @@ test("stores the OpenCode Go API key under its own provider", async () => {
     key: "sk-secret",
   });
   expect(await screen.findByText("API key saved.")).toBeInTheDocument();
+});
+
+test("stores MCP header secrets without crashing", async () => {
+  rpc.mcp.list.query.mockResolvedValue([
+    {
+      id: "composio",
+      enabled: true,
+      transport: "http",
+      command: "",
+      args: [],
+      url: "https://connect.composio.dev/mcp",
+      secretEnv: [],
+      secretHeaders: ["x-consumer-api-key"],
+      timeoutSeconds: 120,
+    },
+  ]);
+  rpc.mcp.status.query.mockResolvedValue([
+    {
+      serverID: "composio",
+      transport: "http",
+      status: "ready",
+      toolCount: 7,
+    },
+  ]);
+  rpc.mcp.setSecrets.mutate.mockResolvedValue(undefined);
+  const transport = createTransport({ origin: "http://127.0.0.1:41000" });
+  const router = createMemoryRouter([
+    {
+      path: "/",
+      element: <Outlet context={{ transport }} />,
+      children: [{ index: true, element: <McpSettings /> }],
+    },
+  ]);
+  render(
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  const user = userEvent.setup();
+  const input = await screen.findByLabelText(
+    "composio header x-consumer-api-key",
+  );
+  await user.type(input, "consumer-key");
+  expect(input).toHaveValue("consumer-key");
+  await user.click(screen.getByRole("button", { name: "Save secrets" }));
+  expect(rpc.mcp.setSecrets.mutate).toHaveBeenCalledWith({
+    serverID: "composio",
+    env: {},
+    headers: { "x-consumer-api-key": "consumer-key" },
+  });
 });

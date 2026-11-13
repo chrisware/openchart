@@ -1344,6 +1344,40 @@ describe("provider-managed requests", () => {
     expect(request.maxOutputTokens).toBeUndefined();
   });
 
+  test("validates JSON Schema inputs for hosted API tools", async () => {
+    const fixture = toolLanguage(
+      "openai",
+      JSON.stringify({ count: "not-a-number" }),
+    );
+    const events = await fixture.collect(
+      input({
+        tools: {
+          counter: {
+            description: "Count",
+            parameters: Schema.Unknown,
+            inputSchema: {
+              type: "object",
+              properties: { count: { type: "number" } },
+              required: ["count"],
+            },
+            execute: () =>
+              Effect.succeed({
+                title: "Count",
+                metadata: {},
+                output: { type: "text", value: "ok" },
+              }),
+          },
+        },
+      }),
+    );
+    expect(
+      events.find((event) => event.type === "tool-error")?.error,
+    ).toContain("LLM.InvalidToolArguments");
+    expect(
+      events.find((event) => event.type === "tool-error")?.error,
+    ).toContain("must be number");
+  });
+
   test("derives MCP schemas and enforces application validation inside the request scope", async () => {
     class PermissionCheck extends Context.Service<
       PermissionCheck,

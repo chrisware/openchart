@@ -44,6 +44,7 @@ import {
   tool,
   type ModelMessage,
 } from "ai";
+import Ajv from "ajv";
 import {
   Context,
   Effect,
@@ -77,6 +78,8 @@ export interface StreamTool<R = never> {
   readonly description: string;
 
   readonly parameters: Schema.Decoder<unknown>;
+  /** Optional model/validation schema for tools with JSON Schema inputs. */
+  readonly inputSchema?: JSONSchema7;
 
   readonly formatValidationError?: (error: Schema.SchemaError) => string;
 
@@ -270,7 +273,9 @@ const run = Effect.fn("LLM.prepare")(function* <E, R>(
   const definitions = Object.entries(input.tools).map(([id, definition]) => ({
     id,
     definition,
-    schema: modelInputSchema(Schema.toEncoded(definition.parameters)),
+    schema:
+      definition.inputSchema ??
+      modelInputSchema(Schema.toEncoded(definition.parameters)),
     validate: toolInputValidator(id, definition),
   }));
   const toolDefinitions: LlmToolDefinition[] = definitions.map((item) => ({
@@ -405,7 +410,11 @@ const run = Effect.fn("LLM.prepare")(function* <E, R>(
             ),
         }),
         execute: (value, options) =>
-          runToolCallback(definition, Effect.succeed(value), options),
+          runToolCallback(
+            definition,
+            validate(value).pipe(Effect.as(value)),
+            options,
+          ),
       }),
     ]),
   );
@@ -497,8 +506,66 @@ function modelInputSchema(parameters: StreamTool["parameters"]): JSONSchema7 {
 
 function toolInputValidator(
   id: string,
-  definition: Pick<StreamTool, "parameters" | "formatValidationError">,
+  definition: Pick<
+    StreamTool,
+    "parameters" | "inputSchema" | "formatValidationError"
+  >,
 ) {
+  if (definition.inputSchema) {
+    const ajv = new Ajv({
+      strict: false,
+      allErrors: true,
+      validateFormats: false,
+    });
+    let validate: ReturnType<typeof ajv.compile>;
+    try {
+      validate = ajv.compile(definition.inputSchema);
+    } catch (cause) {
+      return (value: unknown) =>
+        Schema.decodeUnknownEffect(ToolInput)(value).pipe(
+          Effect.mapError(
+            (error) =>
+              new InvalidToolArguments({
+                toolID: id,
+                cause: error,
+                message: `The ${id} tool has an invalid input schema.`,
+              }),
+          ),
+          Effect.andThen(
+            Effect.fail(
+              new InvalidToolArguments({
+                toolID: id,
+                cause,
+                message: `The ${id} tool has an invalid input schema.`,
+              }),
+            ),
+          ),
+        );
+    }
+    return Effect.fn("LLM.validateToolInput")((value: unknown) =>
+      Schema.decodeUnknownEffect(ToolInput)(value).pipe(
+        Effect.mapError(
+          (cause) =>
+            new InvalidToolArguments({
+              toolID: id,
+              cause,
+              message: `The ${id} tool was called with invalid arguments: ${cause}.`,
+            }),
+        ),
+        Effect.flatMap((input) => {
+          if (validate(input)) return Effect.succeed(input);
+          const detail = ajv.errorsText(validate.errors);
+          return Effect.fail(
+            new InvalidToolArguments({
+              toolID: id,
+              cause: new Error(detail),
+              message: `The ${id} tool was called with invalid arguments: ${detail}.\nPlease rewrite the input so it satisfies the expected schema.`,
+            }),
+          );
+        }),
+      ),
+    );
+  }
   const validate = Schema.decodeUnknownEffect(
     Schema.toEncoded(definition.parameters),
   );

@@ -42,6 +42,7 @@ export function bindTools<R>(input: {
   const bind = (definition: (typeof input.definitions)[number]) => ({
     description: definition.description,
     parameters: definition.parameters,
+    ...(definition.inputSchema ? { inputSchema: definition.inputSchema } : {}),
     formatValidationError: definition.formatValidationError,
     execute: (args: unknown, { toolCallId }: LLM.ToolExecutionOptions) =>
       Effect.gen(function* () {

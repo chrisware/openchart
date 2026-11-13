@@ -2,6 +2,7 @@
 
 export * as Tool from "./tool";
 
+import type { JSONSchema7 } from "@ai-sdk/provider";
 import type { WithParts } from "@openchart/server/agent/contracts/message";
 import type {
   EvidenceCandidates,
@@ -85,6 +86,11 @@ export interface Def<
   readonly description: string;
   /** The sole parameter contract; provider schemas must be derived from it. */
   readonly parameters: Parameters;
+  /**
+   * Optional JSON Schema for tools whose arguments originate outside Effect
+   * schemas, such as MCP servers. Model projection and validation prefer it.
+   */
+  readonly inputSchema?: JSONSchema7;
   /**
    * Decodes untrusted input once before running the authored implementation.
    * The caller owns ToolPart persistence, permission policy, and the execution Scope.
