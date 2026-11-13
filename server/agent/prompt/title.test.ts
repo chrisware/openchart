@@ -194,6 +194,31 @@ test("uses the first real turn, explicit tier 1, and canonical normalized title"
   );
 });
 
+test("uses the selected model when an API provider has no tiers", async () => {
+  await run((fixture) =>
+    Effect.gen(function* () {
+      const input = {
+        ...fixture.input,
+        model: {
+          ...model,
+          providerID: "deepinfra",
+          id: "api-model",
+          tier: undefined,
+        },
+      };
+      yield* SessionTitle.ensure(input);
+      expect(fixture.getModel).toHaveBeenCalledExactlyOnceWith(
+        "deepinfra",
+        "api-model",
+      );
+      expect(request(fixture).model).toMatchObject({
+        providerID: "deepinfra",
+        id: "api-model",
+      });
+    }),
+  );
+});
+
 test("preserves the explicit title profile model", async () => {
   await run(
     (fixture) =>

@@ -1,6 +1,11 @@
 // Purpose: Verifies real AI SDK request behavior and Effect-owned request lifetimes.
 
-import { CLAUDE_CODE, CODEX, TIER1 } from "@openchart/models/model-tiers";
+import {
+  CLAUDE_CODE,
+  CODEX,
+  OPENCODE_GO,
+  TIER1,
+} from "@openchart/models/model-tiers";
 
 import { setTimeout as delay } from "node:timers/promises";
 import type {
@@ -863,6 +868,19 @@ describe("request policy", () => {
           inputSchema: { properties: { query: { type: "string" } } },
         },
       ],
+    });
+  });
+
+  test("routes OpenCode Go by the conversation's stable session ID", async () => {
+    const fixture = language();
+    const selected = {
+      ...model(OPENCODE_GO),
+      id: "deepseek-v4.1-flash",
+    };
+    await fixture.collect(input({ sessionID: "session-42" }, selected));
+    expect(fixture.doStream.mock.calls[0]![0].headers).toMatchObject({
+      "User-Agent": "OpenChart/V2",
+      "x-opencode-session": "session-42",
     });
   });
 

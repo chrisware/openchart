@@ -32,6 +32,11 @@ the file restores reads. Storage failures never become empty settings. Scope
 disposal stops polling. External editors do not participate in the semaphore:
 concurrent external replacement remains last-writer-wins, not a file transaction.
 
+`server/config/migrations.ts` drops saved settings for retired model provider
+IDs before domain decoding, including a default model that points at one.
+Reads therefore stay valid after a provider is removed, and the next write
+persists the cleaned document. Unrelated namespaces and fields are preserved.
+
 `runtime.ts` installs this source before consuming services. Explicit native
 providers passed through `makeRuntime({config})` remain useful for tests and
 embedding: reads use that provider and config mutations fail as read-only.
@@ -57,8 +62,10 @@ invalid provider flags.
 - `providers.binance.enabled` and `providers.yfinance.enabled`: default true;
   public sources require no credentials. Users can disable them in Settings;
   saved choices take precedence over defaults on subsequent launches.
-- `models.providers`: Codex and Claude Code default enabled. Settings inspects
+- `models.providers`: model providers default enabled. Settings inspects
   native readiness independently of enablement; native CLIs own their credentials.
+  DeepInfra and OpenCode Go keys live in encrypted Credential storage, not in
+  `settings.json`.
 - `models.permissionMode`: `ask`, `auto`, or `full-access` (default); a persisted
   cross-provider preference edited in Settings > Models as Ask, Auto, or Always
   allow. LLM captures it for each native request; bindings map sandbox and approval

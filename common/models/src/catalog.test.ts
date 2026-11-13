@@ -8,8 +8,10 @@ import { ZodError } from "zod";
 import { ModelsDev } from "./catalog";
 const fixture = {
   openai: {
+    api: "https://example.com",
     models: {
       "catalog-model": {
+        name: "Catalog model",
         attachment: true,
         reasoning: true,
         temperature: false,
