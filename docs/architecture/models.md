@@ -235,7 +235,8 @@ because OpenChart runs those agents itself. Plugins installed for Claude Code un
 ## Model references and shared constants
 
 [`model-tiers.ts`](../../common/models/src/model-tiers.ts) owns OpenChart's
-`CODEX`, `CLAUDE_CODE`, `ANTIGRAVITY`, `GROK`, `TIER1` through `TIER5`, and tier classification;
+`CODEX`, `CLAUDE_CODE`, `ANTIGRAVITY`, `GROK`, `DEEPINFRA`, `OPENCODE_GO`,
+`TIER1` through `TIER5`, and tier classification;
 each provider's native mapping lives in `providers/<id>/tiers.ts`.
 OpenChart bindings and consumers import these constants;
 independent provider adapters keep their native identity strings locally.
@@ -244,12 +245,12 @@ Discovery establishes availability; this table never manufactures available mode
 
 Product prompts, schedules, defaults, and profile selections accept a supported
 provider plus a model reference: native providers use `tier1` through `tier5`,
-while `openai-compatible` uses a discovered model ID. `AgentPromptModel` derives
+while `deepinfra` and `opencode-go` use a discovered model ID. `AgentPromptModel` derives
 the provider literals from `MODEL_PROVIDER_IDS` and requires a nonempty model
 ID. Unknown providers fail boundary parsing; unknown models fail resolution.
 
 The `models.list` endpoint exposes supported provider choices. Native providers
-expose tier aliases with downward fallbacks; `openai-compatible` exposes its
+expose tier aliases with downward fallbacks; API providers expose their
 discovered model IDs directly. Choices retain the resolved model's native name
 and metadata. Unavailable selections stay unresolved. No separate display name
 is persisted.
@@ -274,17 +275,20 @@ Schema, shared by the public Config API and the native ConfigProvider recipe:
       "codex": { "enabled": true },
       "claude-code": { "enabled": true },
       "antigravity": { "enabled": true },
-      "grok": { "enabled": true }
+      "grok": { "enabled": true },
+      "deepinfra": { "enabled": true },
+      "opencode-go": { "enabled": true }
     },
     "defaultModel": { "providerID": "codex", "modelID": "tier1" }
   }
 }
 ```
 
-Codex, Claude Code, Antigravity and Grok are the registered model providers and default
-to enabled. Settings inspects each even when disabled. Enablement controls model selection and
-inference, not inspection. CLI accounts and credentials remain owned by the native
-provider; there is no model API endpoint or API-key configuration.
+Model providers default to enabled. Settings inspects each even when disabled.
+Enablement controls model selection and inference, not inspection. CLI accounts
+and credentials remain owned by the native provider. The two hosted API
+providers keep their API keys in encrypted Credential storage, never in config,
+and fix their endpoint and models.dev bucket in code.
 
 `permissionMode` is one cross-provider preference: `ask`, `auto`, or
 `full-access` (default). Settings > Models exposes these as **Ask**, **Auto**, and
@@ -627,9 +631,9 @@ own resources without disposing shared providers; Models awaits shared cleanup.
 `server/agent/llm/llm.ts` keeps its existing request preparation and two execution
 paths internally: provider-managed MCP for the registered native providers, and
 ordinary AI SDK execution used by protocol tests. Both obtain their standard SDK
-model through the scoped Models service. `openai-compatible` is the plain API
-provider; it has no `NativeProvider` entry, so LLM uses this ordinary path and
-executes host tools itself. There is no separate request abstraction or
+model through the scoped Models service. `deepinfra` and `opencode-go` are plain
+API providers; they have no `NativeProvider` entry, so LLM uses this ordinary
+path and executes host tools itself. There is no separate request abstraction or
 duplicate portable tool contract.
 
 The request input keeps `user.model.selectedVariant`, agent options, and request
@@ -690,31 +694,34 @@ rotation (including during construction), and real compatible-adapter streaming
 with tool continuation and authentication failures against a local HTTP server.
 These tests do not establish live API-provider or native-account acceptance.
 
-## OpenAI-compatible API
+## Hosted API providers
 
-`openai-compatible` is a plain AI SDK provider rather than a native CLI. Its
-binding discovers models from the configured endpoint's `/models` response and
-enriches known identities from models.dev. Discovered models appear directly in
-the picker and are stored by their endpoint IDs; there is no tier mapping.
-Endpoint and catalog override start unset. Without an override, discovery infers
-the catalog bucket from the endpoint host, then from a model ID that exists in
-exactly one bucket. Colliding identities stay unenriched because providers
-publish different prices and limits for the same model ID.
+`deepinfra` and `opencode-go` are plain AI SDK providers rather than native
+CLIs. Each binding discovers models from its fixed endpoint's `/models`
+response, enriches known identities from its models.dev bucket, and exposes the
+endpoint IDs directly in the picker; there is no tier mapping. DeepInfra uses
+`https://api.deepinfra.com/v1/openai` with the `deepinfra` bucket. OpenCode Go
+uses `https://opencode.ai/inference/go/openai/v1` with the `opencode-go` bucket.
+Endpoint and catalog selection are product constants, so discovery cannot drift
+to a different host or price table.
 
-The API key is never stored in config. Settings saves it through Credential's
-encrypted storage; Models resolves it before registry creation. The input is
-masked and a saved key is never returned to the renderer. Discovery reports
-`configuration_required` with the missing endpoint instead of starting a login
-process. There is no runtime artifact or installation: `openai-compatible` has
-an empty manifest entry, and startup installation skips providers without a
-pinned artifact. The catalog-provider override is a dropdown of models.dev keys
-loaded by the same discovery action; Auto is the default.
+API keys are never stored in config. Settings saves each provider's key through
+Credential's encrypted storage; Models resolves both before registry creation.
+The input is masked and a saved key is never returned to the renderer. Discovery
+reports `configuration_required` until the provider's key exists, instead of
+starting a login process. There is no runtime artifact or installation: both
+providers have empty manifest entries, and startup installation skips providers
+without a pinned artifact.
 
-The binding returns a standard `ProviderV4`; it has no `NativeProvider` entry,
-so `nativeProvider()` is undefined and LLM uses ordinary SDK tool execution.
-Host tools, permissions, questions, structured output, and provider options all
-follow the ordinary path. Quota is `not_applicable`: API endpoints bill the
-user's own account, not an OpenChart plan.
+The binding returns a standard `ProviderV4`; neither provider has a
+`NativeProvider` entry, so `nativeProvider()` is undefined and LLM uses ordinary
+SDK tool execution. Host tools, permissions, questions, structured output, and
+provider options all follow the ordinary path. Quota is `not_applicable`: API
+endpoints bill the user's own account, not an OpenChart plan.
+
+OpenCode Go rejects inference without an `x-opencode-session` header, so LLM
+adds the conversation's stable session ID to every hosted API request; OpenCode
+uses it for routing and prompt caching, and DeepInfra ignores it.
 
 ## Plan quota
 

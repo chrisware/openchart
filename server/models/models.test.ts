@@ -4,7 +4,8 @@ import {
   CLAUDE_CODE,
   CODEX,
   GROK,
-  OPENAI_COMPATIBLE,
+  DEEPINFRA,
+  OPENCODE_GO,
   TIER1,
   TIER4,
   classifyModels,
@@ -110,12 +111,11 @@ function fixture(initial: unknown = {}) {
   const createClaude = vi
     .spyOn(NATIVE_PROVIDERS[CLAUDE_CODE]!, "createModelProvider")
     .mockReturnValue(claude.native);
-  const api = binding(OPENAI_COMPATIBLE);
+  const api = binding(DEEPINFRA);
   api.native.discover.mockResolvedValue({ status: "not_installed" });
-  vi.spyOn(
-    API_PROVIDERS[OPENAI_COMPATIBLE],
-    "createModelProvider",
-  ).mockReturnValue(api.native);
+  vi.spyOn(API_PROVIDERS[DEEPINFRA], "createModelProvider").mockReturnValue(
+    api.native,
+  );
   const catalog = { get: vi.fn(async () => ({})) };
   vi.spyOn(ModelsDev, "create").mockReturnValue(catalog);
   const snapshots = Effect.runSync(
@@ -670,37 +670,40 @@ test("login completion refreshes only its provider, rechecks auth, and invalidat
   expect(f.codex.native.dispose).toHaveBeenCalledOnce();
 });
 
-test("stores and clears the API key through Models", async () => {
+test("stores and clears each API provider key independently", async () => {
   const f = fixture();
   const service = await f.runtime.runPromise(Models.Service);
   modelKeys.clear();
-  await f.runtime.runPromise(service.setApiKey("sk-test"));
-  expect(modelKeys.get(OPENAI_COMPATIBLE)).toBe("sk-test");
-  await f.runtime.runPromise(service.clearApiKey());
-  expect(modelKeys.has(OPENAI_COMPATIBLE)).toBe(false);
+  await f.runtime.runPromise(service.setApiKey(DEEPINFRA, "sk-test"));
+  await f.runtime.runPromise(service.setApiKey(OPENCODE_GO, "sk-go"));
+  expect(modelKeys.get(DEEPINFRA)).toBe("sk-test");
+  expect(modelKeys.get(OPENCODE_GO)).toBe("sk-go");
+  await f.runtime.runPromise(service.clearApiKey(DEEPINFRA));
+  expect(modelKeys.has(DEEPINFRA)).toBe(false);
+  expect(modelKeys.get(OPENCODE_GO)).toBe("sk-go");
+  await f.runtime.runPromise(service.clearApiKey(OPENCODE_GO));
+  expect(modelKeys.has(OPENCODE_GO)).toBe(false);
 });
 
 test("resolves an explicit API model ID", async () => {
   const f = fixture();
   const apiModel = {
     ...model,
-    providerID: OPENAI_COMPATIBLE,
+    providerID: DEEPINFRA,
     id: "api-model",
     name: "API model",
   };
   f.api.native.discover.mockResolvedValue({
     status: "ready",
     provider: {
-      id: OPENAI_COMPATIBLE,
-      name: "OpenAI-compatible",
+      id: DEEPINFRA,
+      name: "DeepInfra",
       models: [apiModel],
     },
   });
   const service = await f.runtime.runPromise(Models.Service);
   expect(
-    await f.runtime.runPromise(
-      service.getModel(OPENAI_COMPATIBLE, "api-model"),
-    ),
+    await f.runtime.runPromise(service.getModel(DEEPINFRA, "api-model")),
   ).toEqual(apiModel);
 });
 
@@ -713,11 +716,8 @@ test("model settings expose every supported provider", () => {
     [CLAUDE_CODE]: { enabled: true },
     [ANTIGRAVITY]: { enabled: true },
     [GROK]: { enabled: true },
-    [OPENAI_COMPATIBLE]: {
-      enabled: true,
-      baseURL: "",
-      catalogProvider: "",
-    },
+    [DEEPINFRA]: { enabled: true },
+    [OPENCODE_GO]: { enabled: true },
   });
   expect(() =>
     decode({ providers: { "unknown-provider": { enabled: true } } }),

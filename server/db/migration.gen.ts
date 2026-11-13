@@ -573,4 +573,11 @@ export const migrations = [
     checksum:
       "f3badaa909c58d3341f0e91b31ffcaebacba3cb0411987fc546fe05ebf3525a8",
   },
+  {
+    ...(await import("./migration/20261113120000_renamed-deepinfra-provider"))
+      .default,
+    filename: "20261113120000_renamed-deepinfra-provider.ts",
+    checksum:
+      "3116b382026ceb1f2f333849eb630c283c3e7db64c1a323c3e70acbaf52ad86c",
+  },
 ] satisfies DatabaseMigration.RegisteredMigration[];

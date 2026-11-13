@@ -48,21 +48,32 @@ function publishSession(sessionID: string, native: readonly AGUIEvent[]) {
   return publish(native.map((event) => ({ sessionID, event })));
 }
 
+/** Ancestors observe delegate lifecycle only; delegate content stays in its own Session. */
+function lifecycleEvents(native: readonly AGUIEvent[]) {
+  return native.filter(
+    (event) =>
+      event.type === EventType.SUBAGENT_STARTED ||
+      event.type === EventType.SUBAGENT_FINISHED ||
+      event.type === EventType.SUBAGENT_ERROR,
+  );
+}
+
 const publishTranscript = Effect.fn("AGUI.publishTranscript")(function* (
   sessionID: string,
   native: readonly AGUIEvent[],
 ) {
   if (native.length === 0) return;
   const parents = yield* ancestors(sessionID);
-  yield* publish(
-    native.flatMap((event) => [
-      { sessionID, event },
-      ...parents.map((parent) => ({
+  const lifecycle = lifecycleEvents(native);
+  yield* publish([
+    ...native.map((event) => ({ sessionID, event })),
+    ...lifecycle.flatMap((event) =>
+      parents.map((parent) => ({
         sessionID: parent.sessionID,
         event: attribute(event, parents[0]!.proxy.id),
       })),
-    ]),
-  );
+    ),
+  ]);
 });
 
 const publishSnapshots = Effect.fn("AGUI.publishSnapshots")(function* (

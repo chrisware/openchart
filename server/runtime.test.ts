@@ -235,8 +235,8 @@ test("composes encrypted API-key storage for Models", async () => {
   });
   try {
     const models = await runtime.runPromise(Models.Service);
-    await runtime.runPromise(models.setApiKey("sk-test"));
-    await runtime.runPromise(models.clearApiKey());
+    await runtime.runPromise(models.setApiKey("deepinfra", "sk-test"));
+    await runtime.runPromise(models.clearApiKey("deepinfra"));
   } finally {
     await runtime.dispose();
   }

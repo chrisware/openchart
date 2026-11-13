@@ -7,7 +7,7 @@ import type { AvailableModel } from "./model-provider";
 import {
   CLAUDE_CODE,
   CODEX,
-  OPENAI_COMPATIBLE,
+  DEEPINFRA,
   TIER1,
   TIER2,
   TIER3,
@@ -184,12 +184,9 @@ describe("logical model tiers", () => {
 
   it("publishes discovered API models directly without tier mapping", () => {
     const choices = modelChoices({
-      id: OPENAI_COMPATIBLE,
-      name: "OpenAI-compatible",
-      models: [
-        model("model-a", OPENAI_COMPATIBLE),
-        model("model-b", OPENAI_COMPATIBLE),
-      ],
+      id: DEEPINFRA,
+      name: "DeepInfra",
+      models: [model("model-a", DEEPINFRA), model("model-b", DEEPINFRA)],
     })[0]!.models;
     expect(choices.map(({ id }) => id)).toEqual(["model-a", "model-b"]);
   });

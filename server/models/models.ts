@@ -33,7 +33,8 @@ import {
 } from "./errors";
 import { config } from "./config";
 import {
-  OPENAI_COMPATIBLE,
+  API_PROVIDER_IDS,
+  type ApiProviderID,
   type NativeProviderID,
 } from "@openchart/models/model-tiers";
 import { NodeServices } from "@effect/platform-node";
@@ -73,10 +74,15 @@ export interface Interface {
   /** Scope-owned, installation and login operations. */
   readonly setup: ProviderSetup;
 
-  /** Encrypts and installs the OpenAI-compatible API key, then refreshes discovery. */
-  readonly setApiKey: (key: string) => Effect.Effect<void, ModelError>;
-  /** Removes the stored OpenAI-compatible API key, then refreshes discovery. */
-  readonly clearApiKey: () => Effect.Effect<void, ModelError>;
+  /** Encrypts and installs one HTTP provider's API key, then refreshes discovery. */
+  readonly setApiKey: (
+    providerID: ApiProviderID,
+    key: string,
+  ) => Effect.Effect<void, ModelError>;
+  /** Removes one HTTP provider's stored key, then refreshes discovery. */
+  readonly clearApiKey: (
+    providerID: ApiProviderID,
+  ) => Effect.Effect<void, ModelError>;
 
   /**
    * Lists product-supported providers available in the current environment,
@@ -180,16 +186,20 @@ export function layer(options: Options) {
       const acquireRegistry = Effect.suspend(() =>
         Effect.flatMap(currentSettings, (settings) =>
           Effect.gen(function* () {
-            const key = Option.isSome(credentials)
-              ? yield* readModelKey(credentials.value, OPENAI_COMPATIBLE).pipe(
-                  Effect.catch(() => Effect.succeed(undefined)),
-                )
-              : undefined;
+            const apiKeys = new Map<ApiProviderID, string>();
+            if (Option.isSome(credentials))
+              for (const providerID of API_PROVIDER_IDS) {
+                const key = yield* readModelKey(
+                  credentials.value,
+                  providerID,
+                ).pipe(Effect.catch(() => Effect.succeed(undefined)));
+                if (key !== undefined) apiKeys.set(providerID, key);
+              }
             return yield* createRegistry(
               catalog,
               settings,
               installations.executables,
-              key,
+              apiKeys,
             );
           }),
         ),
@@ -269,9 +279,9 @@ export function layer(options: Options) {
           inspectCurrent((current) => current.quota(providerID)),
         refresh: refreshAll,
         setup,
-        setApiKey: (key) =>
+        setApiKey: (providerID, key) =>
           Option.isSome(credentials)
-            ? writeModelKey(credentials.value, OPENAI_COMPATIBLE, key).pipe(
+            ? writeModelKey(credentials.value, providerID, key).pipe(
                 Effect.mapError(
                   (cause) => new ConfigurationUnavailable({ cause }),
                 ),
@@ -282,9 +292,9 @@ export function layer(options: Options) {
                   cause: new Error("Encrypted model keys are unavailable"),
                 }),
               ),
-        clearApiKey: () =>
+        clearApiKey: (providerID) =>
           Option.isSome(credentials)
-            ? clearModelKey(credentials.value, OPENAI_COMPATIBLE).pipe(
+            ? clearModelKey(credentials.value, providerID).pipe(
                 Effect.mapError(
                   (cause) => new ConfigurationUnavailable({ cause }),
                 ),

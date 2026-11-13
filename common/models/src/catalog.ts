@@ -11,6 +11,7 @@ const MODELS_DEV_URL = "https://models.dev";
 export namespace ModelsDev {
   /** Catalog fields consumed by enrichment; identities come from native discovery. */
   export const Model = z.object({
+    name: z.string().optional(),
     attachment: z.boolean(),
     reasoning: z.boolean(),
     temperature: z.boolean().default(false),

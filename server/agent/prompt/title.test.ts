@@ -201,18 +201,18 @@ test("uses the selected model when an API provider has no tiers", async () => {
         ...fixture.input,
         model: {
           ...model,
-          providerID: "openai-compatible",
+          providerID: "deepinfra",
           id: "api-model",
           tier: undefined,
         },
       };
       yield* SessionTitle.ensure(input);
       expect(fixture.getModel).toHaveBeenCalledExactlyOnceWith(
-        "openai-compatible",
+        "deepinfra",
         "api-model",
       );
       expect(request(fixture).model).toMatchObject({
-        providerID: "openai-compatible",
+        providerID: "deepinfra",
         id: "api-model",
       });
     }),

@@ -62,8 +62,10 @@ invalid provider flags.
 - `providers.binance.enabled` and `providers.yfinance.enabled`: default true;
   public sources require no credentials. Users can disable them in Settings;
   saved choices take precedence over defaults on subsequent launches.
-- `models.providers`: Codex and Claude Code default enabled. Settings inspects
+- `models.providers`: model providers default enabled. Settings inspects
   native readiness independently of enablement; native CLIs own their credentials.
+  DeepInfra and OpenCode Go keys live in encrypted Credential storage, not in
+  `settings.json`.
 - `models.permissionMode`: `ask`, `auto`, or `full-access` (default); a persisted
   cross-provider preference edited in Settings > Models as Ask, Auto, or Always
   allow. LLM captures it for each native request; bindings map sandbox and approval
@@ -71,6 +73,10 @@ invalid provider flags.
   [model configuration contract](models.md#configuration).
 - `models.defaultModel`: optional explicit provider/model/variant for later
   submissions; absence uses the first available model.
+
+External MCP servers live in `mcp.json` beside `settings.json`; their secret
+environment and header values live in encrypted Credential storage. The `mcp`
+RPC router owns that catalog and never returns secret values.
 
 `config.get` returns decoded public settings with defaults, without writing
 them into the file. Unmanaged namespaces remain in the file but are not exposed.

@@ -105,29 +105,41 @@ export function addMessageMetadata(
         ? messageInfo[source.messageId]
         : undefined;
     const createdAt = source?.createdAt;
-    if (typeof createdAt === "number") {
-      message = {
+    const custom = message.metadata?.custom;
+    const needsCreatedAt =
+      typeof createdAt === "number" && custom?.sourceCreatedAt !== createdAt;
+    if (message.role !== "assistant") {
+      if (!needsCreatedAt) return message;
+      return {
         ...message,
         metadata: {
           ...message.metadata,
-          custom: { ...message.metadata?.custom, sourceCreatedAt: createdAt },
+          custom: { ...custom, sourceCreatedAt: createdAt },
         },
       };
     }
-    if (message.role !== "assistant") return message;
+    const additions = {
+      finalReplyStartIndex,
+      showActions,
+      sourceMessageId: source?.messageId,
+      workspaceRoot:
+        info && "workspaceRoot" in info ? info.workspaceRoot : undefined,
+      sourceCompletedAt:
+        info && "completedAt" in info ? info.completedAt : undefined,
+    };
+    if (
+      !needsCreatedAt &&
+      Object.entries(additions).every(([key, value]) => custom?.[key] === value)
+    )
+      return message;
     return {
       ...message,
       metadata: {
         ...message.metadata,
         custom: {
-          ...message.metadata?.custom,
-          finalReplyStartIndex,
-          showActions,
-          sourceMessageId: source?.messageId,
-          workspaceRoot:
-            info && "workspaceRoot" in info ? info.workspaceRoot : undefined,
-          sourceCompletedAt:
-            info && "completedAt" in info ? info.completedAt : undefined,
+          ...custom,
+          ...(needsCreatedAt ? { sourceCreatedAt: createdAt } : {}),
+          ...additions,
         },
       },
     };

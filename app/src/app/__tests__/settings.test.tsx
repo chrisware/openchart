@@ -5,6 +5,7 @@ import { createQueryClient } from "@openchart/app/lib/react-query/react-query";
 import { CLAUDE_CODE, CODEX } from "@openchart/models/model-tiers";
 import type { ProviderDiscoveryResult } from "@openchart/models/model-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -12,7 +13,8 @@ import {
   NativeProvider,
   RefreshProviders,
 } from "@openchart/app/app/routes/settings/native-provider";
-import { OpenAiCompatibleSettings } from "@openchart/app/app/routes/settings/openai-compatible";
+import { ApiProviderSettings } from "@openchart/app/app/routes/settings/api-provider";
+import McpSettings from "@openchart/app/app/routes/settings/mcp";
 import { useConfig } from "@openchart/app/hooks/use-config";
 import { createTransport } from "@openchart/app/lib/transport/transport";
 
@@ -31,6 +33,19 @@ const rpc = vi.hoisted(() => ({
     writeSetup: { mutate: vi.fn() },
     cancelSetup: { mutate: vi.fn() },
   },
+  mcp: {
+    list: { query: vi.fn() },
+    status: { query: vi.fn() },
+    refresh: { mutate: vi.fn() },
+    setServer: { mutate: vi.fn() },
+    removeServer: { mutate: vi.fn() },
+    setSecrets: { mutate: vi.fn() },
+    clearSecrets: { mutate: vi.fn() },
+  },
+}));
+vi.mock("@openchart/app/app/routes/settings/settings-page", () => ({
+  SettingsPage: ({ children }: { children: unknown }) => children,
+  settingsSections: [],
 }));
 vi.mock("@trpc/client", async (original) => ({
   ...(await original<typeof import("@trpc/client")>()),
@@ -459,85 +474,74 @@ test("completed installation does not claim successful discovery; recheck can re
   await screen.findByRole("button", { name: "Sign in" });
 });
 
-test("edits OpenAI-compatible endpoint fields and saves them", async () => {
+test("shows the fixed DeepInfra endpoint and stores its key", async () => {
   rpc.config.get.query.mockResolvedValue({
     appearance: { theme: "system" },
     providers: { binance: { enabled: false }, yfinance: { enabled: false } },
     models: {
       providers: {
-        "openai-compatible": {
-          enabled: true,
-          baseURL: "",
-          catalogProvider: "",
-        },
+        deepinfra: { enabled: true },
       },
     },
   });
   rpc.models.discover.query.mockResolvedValue({
     status: "ready",
-    provider: {
-      id: "openai-compatible",
-      name: "OpenAI-compatible",
-      models: [],
-    },
-  });
-  const transport = createTransport({ origin: "http://127.0.0.1:41000" });
-  function Settings() {
-    const settings = useConfig(transport);
-    return settings.config ? (
-      <OpenAiCompatibleSettings transport={transport} settings={settings} />
-    ) : null;
-  }
-  render(
-    <QueryClientProvider client={client}>
-      <Settings />
-    </QueryClientProvider>,
-  );
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: "Configure" }));
-  const endpoint = await screen.findByLabelText("OpenAI-compatible base URL");
-  await user.type(endpoint, "https://api.openai.com/v1");
-  await user.click(screen.getByRole("button", { name: "Save endpoint" }));
-  expect(rpc.config.update.mutate).toHaveBeenLastCalledWith({
-    models: {
-      providers: {
-        "openai-compatible": {
-          baseURL: "https://api.openai.com/v1",
-          catalogProvider: "",
-        },
-      },
-    },
-  });
-});
-
-test("stores the API key through the masked input", async () => {
-  rpc.config.get.query.mockResolvedValue({
-    appearance: { theme: "system" },
-    providers: { binance: { enabled: false }, yfinance: { enabled: false } },
-    models: {
-      providers: {
-        "openai-compatible": {
-          enabled: true,
-          baseURL: "https://api.openai.com/v1",
-          catalogProvider: "",
-        },
-      },
-    },
-  });
-  rpc.models.discover.query.mockResolvedValue({
-    status: "ready",
-    provider: {
-      id: "openai-compatible",
-      name: "OpenAI-compatible",
-      models: [],
-    },
+    provider: { id: "deepinfra", name: "DeepInfra", models: [] },
   });
   rpc.models.setApiKey.mutate.mockResolvedValue(undefined);
   const transport = createTransport({ origin: "http://127.0.0.1:41000" });
   function Settings() {
     const settings = useConfig(transport);
     return settings.config ? (
-      <OpenAiCompatibleSettings transport={transport} settings={settings} />
+      <ApiProviderSettings
+        transport={transport}
+        settings={settings}
+        providerID="deepinfra"
+      />
+    ) : null;
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <Settings />
+    </QueryClientProvider>,
+  );
+  expect(
+    await screen.findByText("https://api.deepinfra.com/v1/openai"),
+  ).toBeInTheDocument();
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText("API key"), "sk-secret");
+  await user.click(screen.getByRole("button", { name: "Save key" }));
+  expect(rpc.models.setApiKey.mutate).toHaveBeenCalledWith({
+    providerID: "deepinfra",
+    key: "sk-secret",
+  });
+  expect(await screen.findByText("API key saved.")).toBeInTheDocument();
+});
+
+test("stores the OpenCode Go API key under its own provider", async () => {
+  rpc.config.get.query.mockResolvedValue({
+    appearance: { theme: "system" },
+    providers: { binance: { enabled: false }, yfinance: { enabled: false } },
+    models: {
+      providers: {
+        "opencode-go": { enabled: true },
+      },
+    },
+  });
+  rpc.models.discover.query.mockResolvedValue({
+    status: "ready",
+    provider: { id: "opencode-go", name: "OpenCode Go", models: [] },
+  });
+  rpc.models.setApiKey.mutate.mockResolvedValue(undefined);
+  const transport = createTransport({ origin: "http://127.0.0.1:41000" });
+  function Settings() {
+    const settings = useConfig(transport);
+    return settings.config ? (
+      <ApiProviderSettings
+        transport={transport}
+        settings={settings}
+        providerID="opencode-go"
+      />
     ) : null;
   }
   render(
@@ -546,12 +550,61 @@ test("stores the API key through the masked input", async () => {
     </QueryClientProvider>,
   );
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: "Configure" }));
-  const key = await screen.findByLabelText("API key");
-  await user.type(key, "sk-secret");
+  await user.type(await screen.findByLabelText("API key"), "sk-secret");
   await user.click(screen.getByRole("button", { name: "Save key" }));
   expect(rpc.models.setApiKey.mutate).toHaveBeenCalledWith({
+    providerID: "opencode-go",
     key: "sk-secret",
   });
   expect(await screen.findByText("API key saved.")).toBeInTheDocument();
+});
+
+test("stores MCP header secrets without crashing", async () => {
+  rpc.mcp.list.query.mockResolvedValue([
+    {
+      id: "composio",
+      enabled: true,
+      transport: "http",
+      command: "",
+      args: [],
+      url: "https://connect.composio.dev/mcp",
+      secretEnv: [],
+      secretHeaders: ["x-consumer-api-key"],
+      timeoutSeconds: 120,
+    },
+  ]);
+  rpc.mcp.status.query.mockResolvedValue([
+    {
+      serverID: "composio",
+      transport: "http",
+      status: "ready",
+      toolCount: 7,
+    },
+  ]);
+  rpc.mcp.setSecrets.mutate.mockResolvedValue(undefined);
+  const transport = createTransport({ origin: "http://127.0.0.1:41000" });
+  const router = createMemoryRouter([
+    {
+      path: "/",
+      element: <Outlet context={{ transport }} />,
+      children: [{ index: true, element: <McpSettings /> }],
+    },
+  ]);
+  render(
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  const user = userEvent.setup();
+  const input = await screen.findByLabelText(
+    "composio header x-consumer-api-key",
+  );
+  await user.type(input, "consumer-key");
+  expect(input).toHaveValue("consumer-key");
+  await user.click(screen.getByRole("button", { name: "Save secrets" }));
+  expect(rpc.mcp.setSecrets.mutate).toHaveBeenCalledWith({
+    serverID: "composio",
+    env: {},
+    headers: { "x-consumer-api-key": "consumer-key" },
+  });
 });

@@ -3,8 +3,9 @@ import {
   ANTIGRAVITY,
   CLAUDE_CODE,
   CODEX,
+  DEEPINFRA,
   GROK,
-  OPENAI_COMPATIBLE,
+  OPENCODE_GO,
   type NativeProviderID,
 } from "@openchart/models/model-tiers";
 import type { ComponentType } from "react";
@@ -13,6 +14,7 @@ import {
   OpenAILogo,
   type LogoProps,
 } from "@openchart/app/components/ui/model-selector/logos";
+import { Layers } from "lucide-react";
 import { AntigravityLogo } from "@openchart/app/components/ui/brand/antigravity-logo";
 import { AgentMark } from "@openchart/app/components/ui/brand/agent-marks";
 
@@ -26,6 +28,16 @@ export interface NativeProviderBrand {
 /** Grok wears xAI's mark in the surrounding text color. @example <GrokLogo className="size-4" /> */
 function GrokLogo(props: LogoProps) {
   return <AgentMark agent="xai" {...props} />;
+}
+
+/** DeepInfra serves a multi-model catalog; a neutral stacked-layers mark keeps the host distinct from its model authors. @example <DeepInfraLogo className="size-4" /> */
+function DeepInfraLogo(props: LogoProps) {
+  return <Layers aria-hidden="true" {...props} />;
+}
+
+/** OpenCode Go wears OpenCode's mark. @example <OpenCodeLogo className="size-4" /> */
+function OpenCodeLogo(props: LogoProps) {
+  return <AgentMark agent="openCode" {...props} />;
 }
 
 /**
@@ -45,10 +57,15 @@ export const NATIVE_PROVIDER_BRANDS: Readonly<
     Logo: AntigravityLogo,
   },
   [GROK]: { name: "Grok", agent: "Grok", Logo: GrokLogo },
-  [OPENAI_COMPATIBLE]: {
-    name: "OpenAI-compatible",
-    agent: "OpenAI-compatible",
-    Logo: OpenAILogo,
+  [DEEPINFRA]: {
+    name: "DeepInfra",
+    agent: "DeepInfra",
+    Logo: DeepInfraLogo,
+  },
+  [OPENCODE_GO]: {
+    name: "OpenCode Go",
+    agent: "OpenCode Go",
+    Logo: OpenCodeLogo,
   },
 };
 

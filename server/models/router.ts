@@ -1,5 +1,5 @@
 // Purpose: Exposes model choices, native provider inspection, and explicit setup actions.
-import { modelChoices } from "@openchart/models/model-tiers";
+import { API_PROVIDER_IDS, modelChoices } from "@openchart/models/model-tiers";
 import { Effect, Schema } from "effect";
 import { trpc } from "@openchart/server/lib/trpc";
 import { Models } from "./models";
@@ -7,6 +7,9 @@ import { NativeProviderID } from "./config";
 import { SetupAction } from "./onboarding/setup-state";
 
 const provider = Schema.Struct({ providerID: NativeProviderID });
+const apiProvider = Schema.Struct({
+  providerID: Schema.Literals(API_PROVIDER_IDS),
+});
 const operation = Schema.Struct({
   providerID: NativeProviderID,
   id: Schema.String,
@@ -58,6 +61,7 @@ export const modelsRouter = trpc.router({
     .input(
       input(
         Schema.Struct({
+          ...apiProvider.fields,
           key: Schema.String.check(
             Schema.isMinLength(1),
             Schema.isMaxLength(8192),
@@ -67,14 +71,18 @@ export const modelsRouter = trpc.router({
     )
     .mutation(({ ctx, input }) =>
       ctx.runtime.runPromise(
-        Models.Service.use((models) => models.setApiKey(input.key)),
+        Models.Service.use((models) =>
+          models.setApiKey(input.providerID, input.key),
+        ),
       ),
     ),
-  clearApiKey: trpc.procedure.mutation(({ ctx }) =>
-    ctx.runtime.runPromise(
-      Models.Service.use((models) => models.clearApiKey()),
+  clearApiKey: trpc.procedure
+    .input(input(apiProvider))
+    .mutation(({ ctx, input }) =>
+      ctx.runtime.runPromise(
+        Models.Service.use((models) => models.clearApiKey(input.providerID)),
+      ),
     ),
-  ),
   setupState: trpc.procedure
     .input(input(provider))
     .query(({ ctx, input }) =>

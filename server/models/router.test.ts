@@ -7,11 +7,7 @@ import { expect, test, vi } from "vitest";
 import { createRequestHandler, type AppRouter } from "@openchart/server";
 import { makeRuntime } from "@openchart/server/runtime";
 import { temporaryHome } from "@openchart/server/home.test-utils";
-import {
-  CODEX,
-  CLAUDE_CODE,
-  OPENAI_COMPATIBLE,
-} from "@openchart/models/model-tiers";
+import { CODEX, CLAUDE_CODE, DEEPINFRA } from "@openchart/models/model-tiers";
 import { AvailableModel } from "@openchart/models/model-provider";
 import { Models } from "./models";
 import { QuotaUnavailable } from "./errors";
@@ -109,7 +105,7 @@ test("lists tier choices under models without the old Agent route", async () => 
     ]);
     const apiModel = AvailableModel.parse({
       kind: "language",
-      providerID: OPENAI_COMPATIBLE,
+      providerID: DEEPINFRA,
       id: "api-model",
       name: "API model",
       capabilities: { input: { text: true }, output: { text: true } },
@@ -117,16 +113,16 @@ test("lists tier choices under models without the old Agent route", async () => 
     f.service.list.mockReturnValueOnce(
       Effect.succeed([
         {
-          id: OPENAI_COMPATIBLE,
-          name: "OpenAI-compatible",
+          id: DEEPINFRA,
+          name: "DeepInfra",
           models: [apiModel],
         },
       ]),
     );
     expect(await f.client.models.list.query()).toEqual([
       {
-        id: OPENAI_COMPATIBLE,
-        name: "OpenAI-compatible",
+        id: DEEPINFRA,
+        name: "DeepInfra",
         models: [apiModel],
       },
     ]);
@@ -140,10 +136,18 @@ test("lists tier choices under models without the old Agent route", async () => 
 test("stores and clears the API key through models", async () => {
   const f = await serve();
   try {
-    await f.client.models.setApiKey.mutate({ key: "sk-secret" });
-    expect(f.service.setApiKey).toHaveBeenCalledExactlyOnceWith("sk-secret");
-    await f.client.models.clearApiKey.mutate();
-    expect(f.service.clearApiKey).toHaveBeenCalledOnce();
+    await f.client.models.setApiKey.mutate({
+      providerID: DEEPINFRA,
+      key: "sk-secret",
+    });
+    expect(f.service.setApiKey).toHaveBeenCalledExactlyOnceWith(
+      DEEPINFRA,
+      "sk-secret",
+    );
+    await f.client.models.clearApiKey.mutate({
+      providerID: DEEPINFRA,
+    });
+    expect(f.service.clearApiKey).toHaveBeenCalledExactlyOnceWith(DEEPINFRA);
   } finally {
     await f.close();
   }

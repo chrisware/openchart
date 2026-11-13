@@ -107,7 +107,7 @@ test("rejects malformed quote metadata instead of silently losing quoted context
   ).toThrow();
 });
 
-test("groups native nested attribution under the spawning tools and preserves failed child content", () => {
+test("groups native nested attribution without projecting child transcripts", () => {
   const tool = (id: string, subagentRunId?: string): Message => ({
     id,
     role: "assistant",
@@ -169,54 +169,21 @@ test("groups native nested attribution under the spawning tools and preserves fa
     id: "root-text",
     metadata: { custom: { showActions: true } },
   });
-  expect(converted[0]).toMatchObject({
-    metadata: {
-      custom: {
-        toolSubagents: {
-          alpha: {
-            name: "alpha",
-            running: false,
-            messages: [
-              {
-                id: "alpha-text",
-                content: [{ type: "text", text: "Alpha answer" }],
-                metadata: { custom: { showActions: false } },
-              },
-              {
-                id: "nested",
-                metadata: {
-                  custom: {
-                    toolSubagents: {
-                      nested: {
-                        messages: [
-                          {
-                            id: "nested-text",
-                            content: [{ type: "text", text: "Nested answer" }],
-                          },
-                        ],
-                      },
-                    },
-                  },
-                },
-              },
-            ],
-          },
-        },
-      },
-    },
-  });
-  expect(converted[1]).toMatchObject({
-    metadata: {
-      custom: {
-        toolSubagents: {
-          beta: {
-            error: "Interrupted",
-            running: false,
-            messages: [{ id: "beta-text" }],
-          },
-        },
-      },
-    },
+  const toolSubagents = (index: number) =>
+    converted[index]?.metadata?.custom?.toolSubagents as
+      Record<string, Record<string, unknown>> | undefined;
+  const alpha = toolSubagents(0)?.alpha;
+  expect(alpha).toMatchObject({ id: "alpha", name: "alpha", running: false });
+  // Child conversations open separately; their transcripts never enter the root projection.
+  expect(Object.keys(alpha!).sort()).toEqual([
+    "error",
+    "id",
+    "name",
+    "running",
+  ]);
+  expect(alpha).not.toHaveProperty("messages");
+  expect(toolSubagents(1)).toMatchObject({
+    beta: { id: "beta", name: "beta", error: "Interrupted", running: false },
   });
   expect(messages).toHaveLength(7);
 });

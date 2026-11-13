@@ -14,6 +14,7 @@ import { Permission } from "@openchart/server/agent/permission";
 import { Question } from "@openchart/server/agent/question";
 import { Session } from "@openchart/server/agent/session";
 import { ToolRegistry } from "@openchart/server/agent/tool/registry";
+import { McpTools } from "@openchart/server/mcp/service";
 import { LLM } from "@openchart/server/agent/llm";
 import { Models } from "@openchart/server/models";
 import { Scheduler } from "@openchart/server/scheduler";
@@ -125,6 +126,7 @@ function makeAgentLayer(
     Permission.layer,
     Question.layer,
     ToolRegistry.layer,
+    McpTools.layer,
     Layer.unwrap(
       Effect.map(
         Effect.all([

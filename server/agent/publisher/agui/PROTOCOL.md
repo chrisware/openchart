@@ -194,14 +194,12 @@ Parent Session S / proxy Part P, call C
   TOOL_CALL_START(C) -> ARGS -> END
   ACTIVITY_DELTA(P:activity, childSessionId=child)
   SUBAGENT_STARTED(subagentRunId=P, parentToolCallId=C, parentMessageId=P)
-    STEP_STARTED(child Assistant, subagentRunId=P)
-    TEXT / REASONING / TOOL events (subagentRunId=P)
-    STEP_FINISHED(child Assistant, subagentRunId=P)
-    ... additional child steps, if needed ...
   SUBAGENT_FINISHED(P)                 entire invocation completed after child cleanup
   TOOL_CALL_RESULT(C)                  parent proxy result
 
-Nested child Q: SUBAGENT_STARTED(Q, parentSubagentRunId=P, ...)
+Child TEXT / REASONING / TOOL / STEP events stay in the child Session; ancestor
+observers receive lifecycle only. Nested child Q:
+SUBAGENT_STARTED(Q, parentSubagentRunId=P, ...)
 Interrupted child: parent proxy error -> SUBAGENT_ERROR(P)
 ```
 

@@ -2,7 +2,6 @@
 import {
   API_PROVIDER_IDS,
   MODEL_PROVIDER_IDS,
-  OPENAI_COMPATIBLE,
 } from "@openchart/models/model-tiers";
 import { useOutletContext } from "react-router";
 
@@ -17,8 +16,8 @@ import { Card, CardItem } from "@openchart/app/components/ui/settings/card";
 import { DropdownControl } from "@openchart/app/components/ui/settings/dropdown-control";
 import { useConfig } from "@openchart/app/hooks/use-config";
 
+import { ApiProviderSettings } from "./api-provider";
 import { NativeProvider, RefreshProviders } from "./native-provider";
-import { OpenAiCompatibleSettings } from "./openai-compatible";
 import { SettingsPage } from "./settings-page";
 
 const permissionOptions = [
@@ -172,23 +171,29 @@ export default function ModelSettings() {
           </Card>
           <Card title="Model providers">
             <div className="space-y-6">
-              {MODEL_PROVIDER_IDS.map((id) => (
-                <NativeProvider
-                  key={id}
-                  providerID={id}
-                  transport={transport}
-                  settings={settings}
-                  enabled={config.models.providers[id].enabled}
-                  configurable={id === OPENAI_COMPATIBLE}
-                >
-                  {id === OPENAI_COMPATIBLE ? (
-                    <OpenAiCompatibleSettings
-                      transport={transport}
-                      settings={settings}
-                    />
-                  ) : null}
-                </NativeProvider>
-              ))}
+              {MODEL_PROVIDER_IDS.map((id) => {
+                const apiProvider = API_PROVIDER_IDS.find(
+                  (providerID) => providerID === id,
+                );
+                return (
+                  <NativeProvider
+                    key={id}
+                    providerID={id}
+                    transport={transport}
+                    settings={settings}
+                    enabled={config.models.providers[id].enabled}
+                    configurable={apiProvider !== undefined}
+                  >
+                    {apiProvider ? (
+                      <ApiProviderSettings
+                        transport={transport}
+                        settings={settings}
+                        providerID={apiProvider}
+                      />
+                    ) : null}
+                  </NativeProvider>
+                );
+              })}
             </div>
             <RefreshProviders transport={transport} />
           </Card>

@@ -1,6 +1,11 @@
 // Purpose: Verifies real AI SDK request behavior and Effect-owned request lifetimes.
 
-import { CLAUDE_CODE, CODEX, TIER1 } from "@openchart/models/model-tiers";
+import {
+  CLAUDE_CODE,
+  CODEX,
+  OPENCODE_GO,
+  TIER1,
+} from "@openchart/models/model-tiers";
 
 import { setTimeout as delay } from "node:timers/promises";
 import type {
@@ -866,6 +871,19 @@ describe("request policy", () => {
     });
   });
 
+  test("routes OpenCode Go by the conversation's stable session ID", async () => {
+    const fixture = language();
+    const selected = {
+      ...model(OPENCODE_GO),
+      id: "deepseek-v4.1-flash",
+    };
+    await fixture.collect(input({ sessionID: "session-42" }, selected));
+    expect(fixture.doStream.mock.calls[0]![0].headers).toMatchObject({
+      "User-Agent": "OpenChart/V2",
+      "x-opencode-session": "session-42",
+    });
+  });
+
   test("uses the supplied native snapshot for tier input without rediscovery", async () => {
     const fixture = language();
     const selected = {
@@ -1324,6 +1342,40 @@ describe("provider-managed requests", () => {
     expect(request.tools).toBeUndefined();
     expect(request.temperature).toBeUndefined();
     expect(request.maxOutputTokens).toBeUndefined();
+  });
+
+  test("validates JSON Schema inputs for hosted API tools", async () => {
+    const fixture = toolLanguage(
+      "openai",
+      JSON.stringify({ count: "not-a-number" }),
+    );
+    const events = await fixture.collect(
+      input({
+        tools: {
+          counter: {
+            description: "Count",
+            parameters: Schema.Unknown,
+            inputSchema: {
+              type: "object",
+              properties: { count: { type: "number" } },
+              required: ["count"],
+            },
+            execute: () =>
+              Effect.succeed({
+                title: "Count",
+                metadata: {},
+                output: { type: "text", value: "ok" },
+              }),
+          },
+        },
+      }),
+    );
+    expect(
+      events.find((event) => event.type === "tool-error")?.error,
+    ).toContain("LLM.InvalidToolArguments");
+    expect(
+      events.find((event) => event.type === "tool-error")?.error,
+    ).toContain("must be number");
   });
 
   test("derives MCP schemas and enforces application validation inside the request scope", async () => {

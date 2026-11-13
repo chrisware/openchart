@@ -153,10 +153,10 @@ describe("ProviderTransform.providerOptions", () => {
     ).toEqual({ openai: { effort: "low" } });
   });
 
-  test("uses the AI SDK namespace for OpenAI-compatible", () => {
+  test("uses the AI SDK namespace for a hosted API provider", () => {
     expect(
       ProviderTransform.providerOptions(
-        createModel({ providerID: "openai-compatible", id: "api-model" }),
+        createModel({ providerID: "deepinfra", id: "api-model" }),
         undefined,
         { effort: "low" },
         "openaiCompatible",

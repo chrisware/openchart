@@ -4,7 +4,8 @@ import {
   CLAUDE_CODE,
   CODEX,
   GROK,
-  OPENAI_COMPATIBLE,
+  DEEPINFRA,
+  OPENCODE_GO,
 } from "@openchart/models/model-tiers";
 
 import { createServer, type AppRouter } from "@openchart/server";
@@ -46,11 +47,8 @@ const nativeDisabled = {
       [CLAUDE_CODE]: { enabled: false },
       [ANTIGRAVITY]: { enabled: false },
       [GROK]: { enabled: false },
-      [OPENAI_COMPATIBLE]: {
-        enabled: false,
-        baseURL: "",
-        catalogProvider: "",
-      },
+      [DEEPINFRA]: { enabled: false },
+      [OPENCODE_GO]: { enabled: false },
     },
   },
 };
@@ -288,9 +286,9 @@ test("drops retired provider settings and their default model", async () => {
         ...nativeDisabled.models.providers,
         omp: { enabled: true, tiers: { tier1: ["sushi/q"] } },
         "openai-compatible": {
-          ...nativeDisabled.models.providers["openai-compatible"],
-          tiers: { tier1: ["model-a"] },
-          apiKeyEnv: "sk-old",
+          enabled: true,
+          baseURL: "https://api.deepinfra.com/v1/openai",
+          catalogProvider: "deepinfra",
         },
       },
       defaultModel: { providerID: "omp", modelID: "tier1" },
@@ -300,12 +298,7 @@ test("drops retired provider settings and their default model", async () => {
   try {
     const config = await fixture.client.config.get.query();
     expect(config.models.providers).not.toHaveProperty("omp");
-    expect(config.models.providers["openai-compatible"]).not.toHaveProperty(
-      "tiers",
-    );
-    expect(config.models.providers["openai-compatible"]).not.toHaveProperty(
-      "apiKeyEnv",
-    );
+    expect(config.models.providers).not.toHaveProperty("openai-compatible");
     expect(config.models.defaultModel).toBeUndefined();
 
     await fixture.client.config.update.mutate({
@@ -313,13 +306,37 @@ test("drops retired provider settings and their default model", async () => {
     });
     const saved = JSON.parse(await readFile(fixture.filename, "utf8"));
     expect(saved.models.providers).not.toHaveProperty("omp");
-    expect(saved.models.providers["openai-compatible"]).not.toHaveProperty(
-      "tiers",
-    );
-    expect(saved.models.providers["openai-compatible"]).not.toHaveProperty(
-      "apiKeyEnv",
-    );
+    expect(saved.models.providers).not.toHaveProperty("openai-compatible");
     expect(saved.models).not.toHaveProperty("defaultModel");
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("renames a saved generic-provider default to DeepInfra", async () => {
+  const fixture = await serve({
+    models: {
+      defaultModel: {
+        providerID: "openai-compatible",
+        modelID: "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      },
+    },
+  });
+  try {
+    expect(
+      (await fixture.client.config.get.query()).models.defaultModel,
+    ).toEqual({
+      providerID: DEEPINFRA,
+      modelID: "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    });
+    await fixture.client.config.update.mutate({
+      models: { permissionMode: "ask" },
+    });
+    const saved = JSON.parse(await readFile(fixture.filename, "utf8"));
+    expect(saved.models.defaultModel).toEqual({
+      providerID: DEEPINFRA,
+      modelID: "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    });
   } finally {
     await fixture.close();
   }

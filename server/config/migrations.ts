@@ -1,9 +1,6 @@
 // Purpose: Drops saved settings for provider IDs that the product has retired.
 import { Schema } from "effect";
-import {
-  MODEL_TIER_IDS,
-  OPENAI_COMPATIBLE,
-} from "@openchart/models/model-tiers";
+import { DEEPINFRA, MODEL_TIER_IDS } from "@openchart/models/model-tiers";
 import { RETIRED_MODEL_PROVIDER_IDS } from "@openchart/server/models/config";
 
 type JsonObject = Record<string, Schema.Json>;
@@ -33,33 +30,24 @@ export function migrateSettings(
         changed = true;
       }
     }
-    const api = kept[OPENAI_COMPATIBLE];
-    if (isObject(api)) {
-      const rest = { ...api };
-      let apiChanged = false;
-      for (const field of ["tiers", "apiKeyEnv"]) {
-        if (Object.hasOwn(rest, field)) {
-          delete rest[field];
-          apiChanged = true;
-        }
-      }
-      if (apiChanged) {
-        kept[OPENAI_COMPATIBLE] = rest;
-        changed = true;
-      }
-    }
     if (changed) next.providers = kept;
   }
 
   const defaultModel = models.defaultModel;
   if (isObject(defaultModel)) {
-    const retired = RETIRED_MODEL_PROVIDER_IDS.some(
-      (id) => id === defaultModel.providerID,
-    );
-    const oldApiTier =
-      defaultModel.providerID === OPENAI_COMPATIBLE &&
-      MODEL_TIER_IDS.some((id) => id === defaultModel.modelID);
-    if (retired || oldApiTier) {
+    // The old generic provider only ever served DeepInfra, so keep its explicit
+    // model selection; logical tiers never applied to endpoint model IDs.
+    if (defaultModel.providerID === "openai-compatible") {
+      if (
+        typeof defaultModel.modelID === "string" &&
+        !MODEL_TIER_IDS.some((id) => id === defaultModel.modelID)
+      )
+        next.defaultModel = { ...defaultModel, providerID: DEEPINFRA };
+      else delete next.defaultModel;
+      changed = true;
+    } else if (
+      RETIRED_MODEL_PROVIDER_IDS.some((id) => id === defaultModel.providerID)
+    ) {
       delete next.defaultModel;
       changed = true;
     }

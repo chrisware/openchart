@@ -3,8 +3,9 @@ import {
   ANTIGRAVITY,
   CLAUDE_CODE,
   CODEX,
+  DEEPINFRA,
   GROK,
-  OPENAI_COMPATIBLE,
+  OPENCODE_GO,
   type ApiProviderID,
   type NativeProviderID,
 } from "@openchart/models/model-tiers";
@@ -14,7 +15,8 @@ import { antigravity } from "./antigravity/binding";
 import { claudeCode } from "./claude-code/binding";
 import { codex } from "./codex/binding";
 import { grok } from "./grok/binding";
-import { openaiCompatible } from "./openai-compatible/binding";
+import { deepinfra } from "./deepinfra/binding";
+import { openCodeGo } from "./opencode-go/binding";
 
 /** Every supported native CLI provider by ID; hosts construct bindings from here. */
 export const NATIVE_PROVIDERS: Readonly<
@@ -28,7 +30,8 @@ export const NATIVE_PROVIDERS: Readonly<
 
 /** Every supported plain HTTP provider by ID; these use the ordinary AI SDK path. */
 export const API_PROVIDERS: Readonly<Record<ApiProviderID, ApiProvider>> = {
-  [OPENAI_COMPATIBLE]: openaiCompatible,
+  [DEEPINFRA]: deepinfra,
+  [OPENCODE_GO]: openCodeGo,
 };
 
 /**

@@ -11,6 +11,7 @@ const fixture = {
     api: "https://example.com",
     models: {
       "catalog-model": {
+        name: "Catalog model",
         attachment: true,
         reasoning: true,
         temperature: false,

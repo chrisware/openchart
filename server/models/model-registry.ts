@@ -22,7 +22,7 @@ export const createRegistry = Effect.fn("Models.createRegistry")(function* (
   catalog: ModelsDev.Catalog,
   settings: typeof ModelsSettings.Type.providers,
   executables: Readonly<Record<NativeProviderID, string>>,
-  apiKey?: string,
+  apiKeys: ReadonlyMap<ApiProviderID, string>,
 ) {
   const scope = yield* Effect.scope;
   const assertActive = () =>
@@ -46,7 +46,9 @@ export const createRegistry = Effect.fn("Models.createRegistry")(function* (
       ? native.createModelProvider(catalog, executables[id])
       : API_PROVIDERS[id as ApiProviderID].createModelProvider(catalog, {
           ...settings[id],
-          ...(apiKey ? { apiKey } : {}),
+          ...(apiKeys.has(id as ApiProviderID)
+            ? { apiKey: apiKeys.get(id as ApiProviderID) }
+            : {}),
         });
     bindings.set(id, binding);
     assertTrue(binding.id === id, `Binding provider ID does not match: ${id}`);

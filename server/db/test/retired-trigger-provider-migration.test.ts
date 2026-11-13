@@ -29,7 +29,7 @@ test("removes agent-prompt Triggers that name a retired provider", () =>
         });
       for (const [id, providerID] of [
         ["trg_retired", "omp"],
-        ["trg_current", "openai-compatible"],
+        ["trg_current", "deepinfra"],
       ] as const) {
         yield* db.run(sql`
           INSERT INTO trigger

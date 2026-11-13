@@ -179,7 +179,7 @@ describe("projectTree", () => {
     ).toEqual({ messages: [], messageInfo: {}, lifecycle: [], open: [] });
   });
 
-  test("keeps root inputs and attributes every child message in depth-first link order", () => {
+  test("keeps root content and projects descendants as lifecycle only", () => {
     const result = projectTree("ses_root", branchingTree());
     expect(
       result.messages.map(({ id, role, subagentRunId }) => [
@@ -194,42 +194,18 @@ describe("projectTree", () => {
       ["prt_ses_root_assistant_1:activity", "activity", undefined],
       ["prt_ses_root_assistant_2", "assistant", undefined],
       ["prt_ses_root_assistant_2:activity", "activity", undefined],
-      ["prt_ses_alpha_assistant_0", "assistant", "prt_ses_root_assistant_1"],
-      ["prt_ses_alpha_assistant_1", "assistant", "prt_ses_root_assistant_1"],
-      [
-        "prt_ses_alpha_assistant_1:activity",
-        "activity",
-        "prt_ses_root_assistant_1",
-      ],
-      ["prt_ses_nested_assistant_0", "assistant", "prt_ses_alpha_assistant_1"],
-      ["prt_ses_beta_assistant_0", "assistant", "prt_ses_root_assistant_2"],
     ]);
-    expect(
-      result.messages
-        .filter((item) => item.role === "assistant" && item.content)
-        .map((item) => item.content),
-    ).toEqual(["Root answer", "Alpha", "Nested", "Beta"]);
     expect(Object.keys(result.messageInfo)).toEqual([
       "msg_ses_root_user",
       "msg_ses_root_assistant",
-      "msg_ses_alpha_assistant",
-      "msg_ses_nested_assistant",
-      "msg_ses_beta_assistant",
     ]);
-    expect(result.messageInfo.msg_ses_nested_assistant).toEqual({
-      workspaceRoot: "/test",
-      completedAt: 2,
-      error: null,
-      finish: "stop",
-      cost: 1,
-      tokens: {
-        input: 2,
-        output: 3,
-        reasoning: 4,
-        cache: { read: 5, write: 6 },
-      },
-    });
     expect(result.open).toEqual([]);
+    // Descendant content opens in its own Session; the parent only learns lifecycle.
+    expect(result.lifecycle.map((event) => event.type)).toEqual([
+      EventType.SUBAGENT_STARTED,
+      EventType.SUBAGENT_STARTED,
+      EventType.SUBAGENT_STARTED,
+    ]);
   });
 
   test("encloses each nested lifecycle in its parent and preserves sibling order", () => {
@@ -283,7 +259,7 @@ describe("projectTree", () => {
     ]);
   });
 
-  test("reopens active text, reasoning, and tool streams with their own invocation IDs", () => {
+  test("reopens only the observed Session's active streams", () => {
     const tree = branchingTree(false);
     tree.get("ses_nested")!.history[1] = message("ses_nested", "assistant", [
       { type: "text", text: "Nested" },
@@ -305,19 +281,7 @@ describe("projectTree", () => {
     ]);
     expect(
       result.open.map((event) => [event.type, event.subagentRunId]),
-    ).toEqual([
-      [EventType.TEXT_MESSAGE_START, undefined],
-      [EventType.TEXT_MESSAGE_START, "prt_ses_root_assistant_1"],
-      [EventType.TEXT_MESSAGE_START, "prt_ses_alpha_assistant_1"],
-      [EventType.REASONING_START, "prt_ses_alpha_assistant_1"],
-      [EventType.REASONING_MESSAGE_START, "prt_ses_alpha_assistant_1"],
-      [EventType.TOOL_CALL_START, "prt_ses_alpha_assistant_1"],
-      [EventType.TEXT_MESSAGE_START, "prt_ses_root_assistant_2"],
-    ]);
-    expect(result.open[5]).toMatchObject({
-      toolCallId: "call_echo",
-      parentMessageId: "prt_ses_nested_assistant_2",
-    });
+    ).toEqual([[EventType.TEXT_MESSAGE_START, undefined]]);
   });
 
   test.each([

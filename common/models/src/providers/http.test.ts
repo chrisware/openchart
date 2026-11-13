@@ -1,10 +1,16 @@
-// Purpose: Verifies OpenAI-compatible discovery, configuration gates, and model projection.
+// Purpose: Verifies shared HTTP discovery, configuration gates, and model projection.
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { afterEach, expect, test } from "vitest";
-import { OPENAI_COMPATIBLE } from "@openchart/models/model-tiers";
+import { DEEPINFRA, OPENCODE_GO } from "@openchart/models/model-tiers";
 import type { ModelsDev } from "@openchart/models/catalog";
-import { openaiCompatible } from "./binding";
+import { createOpenAICompatibleProvider } from "./http";
+
+const httpProvider = createOpenAICompatibleProvider({
+  id: DEEPINFRA,
+  name: "DeepInfra",
+  sdkKey: "openaiCompatible",
+});
 
 const servers: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -52,14 +58,14 @@ const catalog: ModelsDev.Catalog = {
 };
 
 test("requires a base URL", async () => {
-  const binding = openaiCompatible.createModelProvider(catalog, {
+  const binding = httpProvider.createModelProvider(catalog, {
     baseURL: "",
   });
   expect(await binding.discover()).toEqual({
     status: "configuration_required",
     message: "Set an OpenAI-compatible base URL.",
   });
-  const invalidURL = openaiCompatible.createModelProvider(catalog, {
+  const invalidURL = httpProvider.createModelProvider(catalog, {
     baseURL: "not a url",
   });
   expect(await invalidURL.discover()).toEqual({
@@ -68,9 +74,25 @@ test("requires a base URL", async () => {
   });
 });
 
+test("requires a key before contacting a hosted endpoint", async () => {
+  const provider = createOpenAICompatibleProvider({
+    id: OPENCODE_GO,
+    name: "OpenCode Go",
+    sdkKey: "openaiCompatible",
+    defaultBaseURL: "https://opencode.ai/inference/go/openai/v1",
+    apiKeyRequired: true,
+  });
+  const binding = provider.createModelProvider(catalog, {});
+  expect(await binding.discover()).toEqual({
+    status: "configuration_required",
+    message: "Set the OpenCode Go API key.",
+  });
+  await binding.dispose();
+});
+
 test("returns discovered models directly", async () => {
   const baseURL = await endpoint([{ id: "local-model" }]);
-  const binding = openaiCompatible.createModelProvider(catalog, { baseURL });
+  const binding = httpProvider.createModelProvider(catalog, { baseURL });
   const result = await binding.discover();
   expect(result.status).toBe("ready");
   if (result.status !== "ready") return;
@@ -85,7 +107,7 @@ test("discovers models, sends the key, and enriches metadata", async () => {
     [{ id: "model-a" }, { id: "model-b" }],
     (authorization) => expect(authorization).toBe("Bearer secret"),
   );
-  const binding = openaiCompatible.createModelProvider(catalog, {
+  const binding = httpProvider.createModelProvider(catalog, {
     baseURL,
     apiKey: "secret",
     catalogProvider: "openai",
@@ -93,7 +115,7 @@ test("discovers models, sends the key, and enriches metadata", async () => {
   const result = await binding.discover();
   expect(result.status).toBe("ready");
   if (result.status !== "ready") return;
-  expect(result.provider.id).toBe(OPENAI_COMPATIBLE);
+  expect(result.provider.id).toBe(DEEPINFRA);
   expect(result.provider.models.map((model) => model.id)).toEqual([
     "model-a",
     "model-b",
@@ -101,7 +123,7 @@ test("discovers models, sends the key, and enriches metadata", async () => {
   expect(
     result.provider.models.find((model) => model.id === "model-a"),
   ).toMatchObject({
-    providerID: OPENAI_COMPATIBLE,
+    providerID: DEEPINFRA,
     name: "model-a",
     capabilities: { reasoning: true, toolcall: true, input: { text: true } },
     limit: { context: 1_000_000, output: 16_384 },
@@ -113,7 +135,7 @@ test("discovers models, sends the key, and enriches metadata", async () => {
 
 test("enriches a unique model identity without a catalog provider", async () => {
   const baseURL = await endpoint([{ id: "model-a" }]);
-  const binding = openaiCompatible.createModelProvider(catalog, { baseURL });
+  const binding = httpProvider.createModelProvider(catalog, { baseURL });
   const result = await binding.discover();
   expect(result.status).toBe("ready");
   if (result.status !== "ready") return;

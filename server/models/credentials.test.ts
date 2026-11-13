@@ -15,21 +15,13 @@ test("stores, replaces, reads, and clears one provider key", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const credentials = yield* Credential.Service;
-      expect(
-        yield* readModelKey(credentials, "openai-compatible"),
-      ).toBeUndefined();
-      yield* writeModelKey(credentials, "openai-compatible", "first");
-      expect(yield* readModelKey(credentials, "openai-compatible")).toBe(
-        "first",
-      );
-      yield* writeModelKey(credentials, "openai-compatible", "second");
-      expect(yield* readModelKey(credentials, "openai-compatible")).toBe(
-        "second",
-      );
-      yield* clearModelKey(credentials, "openai-compatible");
-      expect(
-        yield* readModelKey(credentials, "openai-compatible"),
-      ).toBeUndefined();
+      expect(yield* readModelKey(credentials, "deepinfra")).toBeUndefined();
+      yield* writeModelKey(credentials, "deepinfra", "first");
+      expect(yield* readModelKey(credentials, "deepinfra")).toBe("first");
+      yield* writeModelKey(credentials, "deepinfra", "second");
+      expect(yield* readModelKey(credentials, "deepinfra")).toBe("second");
+      yield* clearModelKey(credentials, "deepinfra");
+      expect(yield* readModelKey(credentials, "deepinfra")).toBeUndefined();
     }).pipe(Effect.provide(storage)),
   );
 });

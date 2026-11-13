@@ -23,6 +23,7 @@ import { accessRouter } from "@openchart/server/access/router";
 import { resourceRouter } from "@openchart/server/resources/router";
 import { workspaceRouter } from "@openchart/server/workspace/router";
 import { modelsRouter } from "@openchart/server/models/router";
+import { mcpRouter } from "@openchart/server/mcp/router";
 import { configRouter } from "@openchart/server/config/router";
 import { schedulerRouter } from "@openchart/server/scheduler/router";
 import { collectionRouter } from "@openchart/server/collection/router";
@@ -56,6 +57,7 @@ export const router = trpc.router({
   monitoring: monitoringRouter,
   proactive: proactiveRouter,
   models: modelsRouter,
+  mcp: mcpRouter,
   workspace: workspaceRouter,
   echo: trpc.procedure
     .input(
