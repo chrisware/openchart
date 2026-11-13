@@ -117,6 +117,12 @@ export const createAppRouter = (
           }),
         },
         {
+          path: "settings/tools",
+          lazy: async () => ({
+            Component: (await import("./routes/settings/mcp")).default,
+          }),
+        },
+        {
           path: "settings/providers",
           lazy: async () => ({
             Component: (await import("./routes/settings/providers")).default,

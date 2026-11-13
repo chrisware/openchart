@@ -56,6 +56,8 @@ export function registerBuiltins(
       { action: "dataset_select", resource: "*", decision: "allow" },
       { action: "tea_check", resource: "*", decision: "allow" },
       { action: "tea_run", resource: "*", decision: "allow" },
+      // Configured MCP tools are available to the model but still prompt.
+      { action: "mcp__*", resource: "*", decision: "ask" },
     );
   });
   draft.update("title", (info) => {

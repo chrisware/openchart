@@ -16,6 +16,7 @@ import { Permission } from "@openchart/server/agent/permission";
 import { AgentRun, ID } from "@openchart/server/agent/run/run";
 import { Session } from "@openchart/server/agent/session";
 import { ToolRegistry } from "@openchart/server/agent/tool/registry";
+import { McpTools } from "@openchart/server/mcp/service";
 import { Database } from "@openchart/server/db";
 import { Events } from "@openchart/server/events";
 import { Models } from "@openchart/server/models";
@@ -76,6 +77,7 @@ type Requirements = Effect.Services<ReturnType<typeof execute>> | Scope.Scope;
 export function run<A, E>(
   program: (fixture: Fixture) => Effect.Effect<A, E, Requirements>,
   configuration: AgentProfile.Configuration = {},
+  mcpTools: Layer.Layer<McpTools.Service> = McpTools.layerDefault,
 ) {
   return Effect.runPromise(
     Effect.scoped(
@@ -157,6 +159,7 @@ export function run<A, E>(
             Permission.layer,
             Question.layer,
             ToolRegistry.layer,
+            mcpTools,
           ).pipe(
             Layer.provideMerge(Tea.layer),
             Layer.provideMerge(WorkspacesLayer),

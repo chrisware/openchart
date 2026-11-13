@@ -7,6 +7,7 @@ import { Permission } from "@openchart/server/agent/permission";
 import { Processor } from "@openchart/server/agent/processor/processor";
 import { Session } from "@openchart/server/agent/session/session";
 import { ToolRegistry } from "@openchart/server/agent/tool/registry";
+import { McpTools } from "@openchart/server/mcp/service";
 import { LLM } from "@openchart/server/agent/llm/llm";
 import {
   toolCallStream,
@@ -40,7 +41,8 @@ export const processStep = Effect.fn("Prompt.processStep")(function* (
   const registry = yield* ToolRegistry.Service;
   const permission = yield* Permission.Service;
   const question = yield* Question.Service;
-  const definitions = yield* registry.all();
+  const mcp = yield* McpTools.Service;
+  const definitions = [...(yield* registry.all()), ...(yield* mcp.all())];
   const history = prepareStepHistory(input);
   const messages = yield* toModelMessages(history, input.model, {
     toolOutput: "clipped",

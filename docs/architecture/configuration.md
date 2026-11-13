@@ -74,6 +74,10 @@ invalid provider flags.
 - `models.defaultModel`: optional explicit provider/model/variant for later
   submissions; absence uses the first available model.
 
+External MCP servers live in `mcp.json` beside `settings.json`; their secret
+environment and header values live in encrypted Credential storage. The `mcp`
+RPC router owns that catalog and never returns secret values.
+
 `config.get` returns decoded public settings with defaults, without writing
 them into the file. Unmanaged namespaces remain in the file but are not exposed.
 `config.update` accepts a strict derived JSON Merge Patch: omission leaves a

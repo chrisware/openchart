@@ -654,6 +654,32 @@ tool results added while the session was closed would be appended in the wrong p
 This policy also lets infrequent history replacements remove old Activities; all
 deltas still go to the native reducer.
 
+## External MCP tools
+
+`server/mcp` connects user-configured MCP servers and adds their tools to the
+same Prompt catalog as builtins. `mcp.json` under the application home owns the
+server catalog (`id`, transport, command/args or URL, secret names, timeout);
+secret environment and header values live in encrypted Credential storage under
+`mcp:<serverID>`, never in that file. Settings writes both through the `mcp`
+router and shows per-server connection/tool status.
+
+`McpTools` connects lazily per enabled server, caches each connection, reconnects
+after config or secret changes, and disposes children with the service scope.
+Ancestor/native provider delivery is unchanged: MCP tools are ordinary host
+tools, so Codex/Claude/Antigravity/Grok receive them through their existing
+provider-managed bridge and hosted API providers execute them in-process.
+Discovery failures omit only that server's tools; they never hide builtins.
+
+MCP tools expose JSON Schema rather than Effect schemas. `Tool.Def.inputSchema`
+carries it to the model and Ajv validates arguments before execution; builtin
+tools keep their Effect decoder. Tool IDs are `mcp__<server>__<tool>`, and every
+call asks OpenChart's Permission service (default ask). Text, image, audio,
+resource, resource-link and structured results map to the existing tool output
+and attachment contracts; `isError` becomes a typed tool failure. Stdio servers
+receive a minimal environment plus configured secrets; streamable HTTP servers
+receive configured headers. MCP sampling, elicitation, roots and resources are
+not exposed.
+
 ## Agent plugins
 
 See [Agent plugins](agent-plugins.md) for the Agent `run.before` hook and persisted

@@ -10,13 +10,14 @@ import type { CodexProviderOptions } from "@openchart/models/providers/codex/ada
 import { Permission } from "@openchart/server/agent/permission";
 import { ToolRegistry } from "@openchart/server/agent/tool/registry";
 import { Tool } from "@openchart/server/agent/tool/tool";
+import { McpTools } from "@openchart/server/mcp/service";
 import { teaConfigExample } from "@openchart/server/agent/tool/tools/tea-shared";
 import { dashboardResource } from "@openchart/server/resources/dashboard";
 import { Database } from "@openchart/server/db";
 import { Home } from "@openchart/server/home";
 import path from "node:path";
 import { assertExists } from "@openchart/utils/assert";
-import { ConfigProvider, Effect, Exit, Schema } from "effect";
+import { ConfigProvider, Effect, Exit, Layer, Schema } from "effect";
 import { expect, test, vi } from "vitest";
 import { isUsableSummary, readHistory } from "./history";
 import { execute } from "./execute";
@@ -31,6 +32,44 @@ const candidate: EvidenceCandidate = {
   },
   blocks: [{ kind: "excerpt", text: "Exact evidence" }],
 };
+
+test("includes configured MCP tools in the model request", async () => {
+  const definition: Tool.Def = {
+    id: "mcp__fake__echo",
+    description: "Echo from a fake MCP server",
+    parameters: Schema.Unknown,
+    inputSchema: {
+      type: "object",
+      properties: { text: { type: "string" } },
+      required: ["text"],
+    },
+    execute: () =>
+      Effect.succeed({
+        title: "Echo",
+        metadata: {},
+        output: { type: "text", value: "ok" },
+      }),
+  };
+  const mcp = Layer.succeed(McpTools.Service, {
+    all: () => Effect.succeed([definition]),
+    status: () => Effect.succeed([]),
+    configured: () => Effect.succeed([]),
+    refresh: () => Effect.void,
+  });
+  await run(
+    (fixture) =>
+      Effect.gen(function* () {
+        yield* execute(fixture.run);
+        expect(
+          fixture.calls.some((call) =>
+            call.tools?.some((tool) => tool.name === "mcp__fake__echo"),
+          ),
+        ).toBe(true);
+      }),
+    {},
+    mcp,
+  );
+});
 
 test("replays Tea run values and alert events into the Agent's next model request", async () => {
   await run((fixture) =>
