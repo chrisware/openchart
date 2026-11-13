@@ -2,6 +2,7 @@
 import { Config, Effect, Schema, Struct } from "effect";
 import { ProviderSettings } from "@openchart/server/data/providers/configured";
 import { ModelsSettings } from "@openchart/server/models/config";
+
 import { NotificationSettings } from "@openchart/server/notification/config";
 import { trpc } from "@openchart/server/lib/trpc";
 import { AppearanceSettings } from "./appearance";

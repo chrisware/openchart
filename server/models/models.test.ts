@@ -4,6 +4,8 @@ import {
   CLAUDE_CODE,
   CODEX,
   GROK,
+  DEEPINFRA,
+  OPENCODE_GO,
   TIER1,
   TIER4,
   classifyModels,
@@ -11,7 +13,7 @@ import {
 import type { LanguageModelV4, ProviderV4 } from "@ai-sdk/provider";
 import { NoSuchModelError } from "ai";
 import { ModelsDev } from "@openchart/models/catalog";
-import { NATIVE_PROVIDERS } from "@openchart/models/providers";
+import { API_PROVIDERS, NATIVE_PROVIDERS } from "@openchart/models/providers";
 import { claudeCodeTiers } from "@openchart/models/providers/claude-code/tiers";
 import {
   AvailableModel,
@@ -39,7 +41,7 @@ import {
   type QuotaUnavailable,
 } from "./errors";
 import { Models } from "./models";
-import { modelTestDependencies } from "./models.test-utils";
+import { modelKeys, modelTestDependencies } from "./models.test-utils";
 import { ModelsSettings } from "./config";
 
 const options: Models.Options = {
@@ -104,11 +106,16 @@ function fixture(initial: unknown = {}) {
   const claude = binding(CLAUDE_CODE);
   claude.native.discover.mockResolvedValue({ status: "not_installed" });
   const createCodex = vi
-    .spyOn(NATIVE_PROVIDERS[CODEX], "createModelProvider")
+    .spyOn(NATIVE_PROVIDERS[CODEX]!, "createModelProvider")
     .mockReturnValue(codex.native);
   const createClaude = vi
-    .spyOn(NATIVE_PROVIDERS[CLAUDE_CODE], "createModelProvider")
+    .spyOn(NATIVE_PROVIDERS[CLAUDE_CODE]!, "createModelProvider")
     .mockReturnValue(claude.native);
+  const api = binding(DEEPINFRA);
+  api.native.discover.mockResolvedValue({ status: "not_installed" });
+  vi.spyOn(API_PROVIDERS[DEEPINFRA], "createModelProvider").mockReturnValue(
+    api.native,
+  );
   const catalog = { get: vi.fn(async () => ({})) };
   vi.spyOn(ModelsDev, "create").mockReturnValue(catalog);
   const snapshots = Effect.runSync(
@@ -135,7 +142,16 @@ function fixture(initial: unknown = {}) {
     runtime.runPromise(
       SubscriptionRef.set(snapshots, ConfigProvider.fromUnknown(settings)),
     );
-  return { runtime, codex, claude, createCodex, createClaude, catalog, update };
+  return {
+    runtime,
+    codex,
+    claude,
+    api,
+    createCodex,
+    createClaude,
+    catalog,
+    update,
+  };
 }
 
 test("constructs both bindings lazily without discovery and borrows the SDK without inference", async () => {
@@ -654,7 +670,44 @@ test("login completion refreshes only its provider, rechecks auth, and invalidat
   expect(f.codex.native.dispose).toHaveBeenCalledOnce();
 });
 
-test("model settings expose only native providers", () => {
+test("stores and clears each API provider key independently", async () => {
+  const f = fixture();
+  const service = await f.runtime.runPromise(Models.Service);
+  modelKeys.clear();
+  await f.runtime.runPromise(service.setApiKey(DEEPINFRA, "sk-test"));
+  await f.runtime.runPromise(service.setApiKey(OPENCODE_GO, "sk-go"));
+  expect(modelKeys.get(DEEPINFRA)).toBe("sk-test");
+  expect(modelKeys.get(OPENCODE_GO)).toBe("sk-go");
+  await f.runtime.runPromise(service.clearApiKey(DEEPINFRA));
+  expect(modelKeys.has(DEEPINFRA)).toBe(false);
+  expect(modelKeys.get(OPENCODE_GO)).toBe("sk-go");
+  await f.runtime.runPromise(service.clearApiKey(OPENCODE_GO));
+  expect(modelKeys.has(OPENCODE_GO)).toBe(false);
+});
+
+test("resolves an explicit API model ID", async () => {
+  const f = fixture();
+  const apiModel = {
+    ...model,
+    providerID: DEEPINFRA,
+    id: "api-model",
+    name: "API model",
+  };
+  f.api.native.discover.mockResolvedValue({
+    status: "ready",
+    provider: {
+      id: DEEPINFRA,
+      name: "DeepInfra",
+      models: [apiModel],
+    },
+  });
+  const service = await f.runtime.runPromise(Models.Service);
+  expect(
+    await f.runtime.runPromise(service.getModel(DEEPINFRA, "api-model")),
+  ).toEqual(apiModel);
+});
+
+test("model settings expose every supported provider", () => {
   const decode = Schema.decodeUnknownSync(ModelsSettings, {
     onExcessProperty: "error",
   });
@@ -663,9 +716,11 @@ test("model settings expose only native providers", () => {
     [CLAUDE_CODE]: { enabled: true },
     [ANTIGRAVITY]: { enabled: true },
     [GROK]: { enabled: true },
+    [DEEPINFRA]: { enabled: true },
+    [OPENCODE_GO]: { enabled: true },
   });
   expect(() =>
-    decode({ providers: { "openai-compatible": { enabled: true } } }),
+    decode({ providers: { "unknown-provider": { enabled: true } } }),
   ).toThrow();
 });
 

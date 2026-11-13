@@ -222,4 +222,7 @@ export const PROVIDER_MANIFEST: RuntimeManifest<NativeProviderID> = {
       compression: "brotli",
     },
   },
+  // Hosted API providers speak HTTP directly; no runtime is installed.
+  deepinfra: {},
+  "opencode-go": {},
 };

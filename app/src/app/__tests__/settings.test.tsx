@@ -5,6 +5,7 @@ import { createQueryClient } from "@openchart/app/lib/react-query/react-query";
 import { CLAUDE_CODE, CODEX } from "@openchart/models/model-tiers";
 import type { ProviderDiscoveryResult } from "@openchart/models/model-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -12,6 +13,7 @@ import {
   NativeProvider,
   RefreshProviders,
 } from "@openchart/app/app/routes/settings/native-provider";
+import { ApiProviderSettings } from "@openchart/app/app/routes/settings/api-provider";
 import { useConfig } from "@openchart/app/hooks/use-config";
 import { createTransport } from "@openchart/app/lib/transport/transport";
 
@@ -21,12 +23,19 @@ const rpc = vi.hoisted(() => ({
   models: {
     discover: { query: vi.fn() },
     quota: { query: vi.fn() },
+    catalogProviders: { query: vi.fn() },
+    setApiKey: { mutate: vi.fn() },
+    clearApiKey: { mutate: vi.fn() },
     refresh: { mutate: vi.fn() },
     setupState: { query: vi.fn() },
     startSetup: { mutate: vi.fn() },
     writeSetup: { mutate: vi.fn() },
     cancelSetup: { mutate: vi.fn() },
   },
+}));
+vi.mock("@openchart/app/app/routes/settings/settings-page", () => ({
+  SettingsPage: ({ children }: { children: unknown }) => children,
+  settingsSections: [],
 }));
 vi.mock("@trpc/client", async (original) => ({
   ...(await original<typeof import("@trpc/client")>()),
@@ -38,6 +47,7 @@ beforeEach(() => {
   rpc.events.subscribe.subscribe.mockReturnValue({ unsubscribe: vi.fn() });
   rpc.models.setupState.query.mockResolvedValue({ status: "idle" });
   rpc.models.quota.query.mockResolvedValue({ status: "not_applicable" });
+  rpc.models.catalogProviders.query.mockResolvedValue(["deepinfra", "openai"]);
   client = createQueryClient({ defaultOptions: { queries: { retry: false } } });
 });
 afterEach(() => client.clear());
@@ -452,4 +462,89 @@ test("completed installation does not claim successful discovery; recheck can re
     .setup()
     .click(screen.getByRole("button", { name: "Check again" }));
   await screen.findByRole("button", { name: "Sign in" });
+});
+
+test("shows the fixed DeepInfra endpoint and stores its key", async () => {
+  rpc.config.get.query.mockResolvedValue({
+    appearance: { theme: "system" },
+    providers: { binance: { enabled: false }, yfinance: { enabled: false } },
+    models: {
+      providers: {
+        deepinfra: { enabled: true },
+      },
+    },
+  });
+  rpc.models.discover.query.mockResolvedValue({
+    status: "ready",
+    provider: { id: "deepinfra", name: "DeepInfra", models: [] },
+  });
+  rpc.models.setApiKey.mutate.mockResolvedValue(undefined);
+  const transport = createTransport({ origin: "http://127.0.0.1:41000" });
+  function Settings() {
+    const settings = useConfig(transport);
+    return settings.config ? (
+      <ApiProviderSettings
+        transport={transport}
+        settings={settings}
+        providerID="deepinfra"
+      />
+    ) : null;
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <Settings />
+    </QueryClientProvider>,
+  );
+  expect(
+    await screen.findByText("https://api.deepinfra.com/v1/openai"),
+  ).toBeInTheDocument();
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText("API key"), "sk-secret");
+  await user.click(screen.getByRole("button", { name: "Save key" }));
+  expect(rpc.models.setApiKey.mutate).toHaveBeenCalledWith({
+    providerID: "deepinfra",
+    key: "sk-secret",
+  });
+  expect(await screen.findByText("API key saved.")).toBeInTheDocument();
+});
+
+test("stores the OpenCode Go API key under its own provider", async () => {
+  rpc.config.get.query.mockResolvedValue({
+    appearance: { theme: "system" },
+    providers: { binance: { enabled: false }, yfinance: { enabled: false } },
+    models: {
+      providers: {
+        "opencode-go": { enabled: true },
+      },
+    },
+  });
+  rpc.models.discover.query.mockResolvedValue({
+    status: "ready",
+    provider: { id: "opencode-go", name: "OpenCode Go", models: [] },
+  });
+  rpc.models.setApiKey.mutate.mockResolvedValue(undefined);
+  const transport = createTransport({ origin: "http://127.0.0.1:41000" });
+  function Settings() {
+    const settings = useConfig(transport);
+    return settings.config ? (
+      <ApiProviderSettings
+        transport={transport}
+        settings={settings}
+        providerID="opencode-go"
+      />
+    ) : null;
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <Settings />
+    </QueryClientProvider>,
+  );
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText("API key"), "sk-secret");
+  await user.click(screen.getByRole("button", { name: "Save key" }));
+  expect(rpc.models.setApiKey.mutate).toHaveBeenCalledWith({
+    providerID: "opencode-go",
+    key: "sk-secret",
+  });
+  expect(await screen.findByText("API key saved.")).toBeInTheDocument();
 });
