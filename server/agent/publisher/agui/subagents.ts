@@ -41,10 +41,7 @@ type Transcript = {
  * ```
  */
 type TreeProjection = {
-  /**
-   * Visible root history plus descendant Assistant output, attributed by
-   * invocation. Descendant user inputs stay private to their own Session.
-   */
+  /** The observed Session's own history; delegate content opens in its own Session. */
   messages: ReturnType<typeof projectTranscript>;
 
   /** Own User model choices and visible Assistant completion facts, keyed by Message ID. */
@@ -55,8 +52,8 @@ type TreeProjection = {
    */
   lifecycle: AGUIEvent[];
   /**
-   * Starts for unfinished text/reasoning and pending tool arguments.
-   * Restores stream bookkeeping while preserving the snapshot's content.
+   * Starts for the observed Session's unfinished text/reasoning and pending
+   * tool arguments. Delegate streams reopen only in their own Session.
    */
   open: AGUIEvent[];
 };
@@ -209,17 +206,12 @@ export function projectTree(
       invocation === undefined
         ? transcript.history
         : transcript.history.filter(({ info }) => info.role === "assistant");
-    const messages = projectTranscript(history).map((message) =>
-      invocation === undefined
-        ? message
-        : { ...message, subagentRunId: invocation.subagentRunId },
-    );
-    const messageInfo = projectMessageInfo(history);
-    const open = activePartEvents(history).map((event) =>
-      invocation === undefined
-        ? event
-        : attribute(event, invocation.subagentRunId),
-    );
+    // Only the observed Session contributes content. Descendants contribute
+    // lifecycle so the parent can show and settle its delegate cards.
+    const messages = invocation === undefined ? projectTranscript(history) : [];
+    const messageInfo =
+      invocation === undefined ? projectMessageInfo(history) : {};
+    const open = invocation === undefined ? activePartEvents(history) : [];
     const children = links(history).map((proxy) => {
       const childTranscript = tree.get(toolDelegateSessionId(proxy)!);
       assertExists(childTranscript, "Delegate transcript must be loaded");
@@ -236,18 +228,15 @@ export function projectTree(
     const end = proxy === undefined ? [] : subagentEnd(proxy);
 
     return {
-      messages: [...messages, ...children.flatMap((child) => child.messages)],
-      messageInfo: Object.fromEntries([
-        ...Object.entries(messageInfo),
-        ...children.flatMap((child) => Object.entries(child.messageInfo)),
-      ]),
+      messages,
+      messageInfo,
       // A parent's start precedes every child lifecycle; its end follows them.
       lifecycle: [
         ...(invocation === undefined ? [] : [invocation]),
         ...children.flatMap((child) => child.lifecycle),
         ...end,
       ],
-      open: [...open, ...children.flatMap((child) => child.open)],
+      open,
     };
   }
 

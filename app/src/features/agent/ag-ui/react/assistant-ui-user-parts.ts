@@ -136,22 +136,46 @@ function addUserParts(
   };
 }
 
+/** Per-message conversion results, reused while the native message identity is unchanged. */
+export type MessageConversionCache = Map<
+  string,
+  { source: Message; converted: ThreadMessageLike[] }
+>;
+
 /**
  * Convert native messages, restoring workflow and quote Parts before the prompt
  * text and attachments from file Parts, all read from native Part metadata.
- * Never mutates input; malformed view data throws.
- * @example const converted = convertMessagesWithUserParts(messages);
+ * Never mutates input; malformed view data throws. Tool and Activity messages
+ * use the library's cross-message merge path and bypass the per-message cache.
+ * @example const converted = convertMessagesWithUserParts(messages, cache);
  */
 export function convertMessagesWithUserParts(
   messages: readonly Message[],
+  cache?: MessageConversionCache,
 ): ThreadMessageLike[] {
-  const parts = new Map(
-    messages.map((message) => [message.id, userParts(message)] as const),
+  const merged = messages.some(
+    (message) => message.role === "tool" || message.role === "activity",
   );
-  return fromAgUiMessages(messages).map((message) => {
-    const user = parts.get(message.id ?? "");
-    return user === undefined
-      ? message
-      : addUserParts(message, user.dataParts, user.attachments);
+  if (cache === undefined || merged) {
+    cache?.clear();
+    const parts = new Map(
+      messages.map((message) => [message.id, userParts(message)] as const),
+    );
+    return fromAgUiMessages(messages).map((message) => {
+      const user = parts.get(message.id ?? "");
+      return user === undefined
+        ? message
+        : addUserParts(message, user.dataParts, user.attachments);
+    });
+  }
+  return messages.flatMap((source) => {
+    const cached = cache.get(source.id);
+    if (cached?.source === source) return cached.converted;
+    const user = userParts(source);
+    const converted = fromAgUiMessages([source]).map((message) =>
+      addUserParts(message, user.dataParts, user.attachments),
+    );
+    cache.set(source.id, { source, converted });
+    return converted;
   });
 }

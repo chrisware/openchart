@@ -123,7 +123,7 @@ async function fixture() {
   return { runtime, ...tree };
 }
 
-test("history pages include only the selected turns' delegates at their latest turn and keep child input private", async () => {
+test("history pages keep delegate content and input out of the parent while retaining lifecycle", async () => {
   const f = await fixture();
   const { first, older, events } = await f.runtime.runPromise(
     Effect.gen(function* () {
@@ -216,12 +216,9 @@ test("history pages include only the selected turns' delegates at their latest t
       .filter((message) => message.role === "user")
       .map((message) => message.id),
   ).toEqual(["msg_root_user"]);
-  expect(older.messages).toContainEqual(
-    expect.objectContaining({
-      id: `prt_child_later_${DEFAULT_HISTORY_TURN_LIMIT - 1}`,
-      content: `Child turn ${DEFAULT_HISTORY_TURN_LIMIT + 1}`,
-      subagentRunId: "prt_child_proxy",
-    }),
+  // Delegate transcripts open in their own Session, never in the parent page.
+  expect(older.messages.map((message) => message.id)).not.toContain(
+    `prt_child_later_${DEFAULT_HISTORY_TURN_LIMIT - 1}`,
   );
   expect(older.messages.map((message) => message.id)).not.toContain(
     "prt_msg_child_assistant_answer",
@@ -229,6 +226,9 @@ test("history pages include only the selected turns' delegates at their latest t
   expect(older.messages.map((message) => message.id)).not.toContain(
     "prt_msg_nested_assistant_answer",
   );
+  expect(
+    older.messages.every((message) => message.subagentRunId === undefined),
+  ).toBe(true);
   expect(older.lifecycle).toEqual([
     expect.objectContaining({
       type: EventType.SUBAGENT_STARTED,
@@ -237,6 +237,8 @@ test("history pages include only the selected turns' delegates at their latest t
   ]);
   expect(older.messageInfo).not.toHaveProperty("msg_child_user");
   expect(older.messageInfo).not.toHaveProperty("msg_nested_user");
+  expect(older.messageInfo).not.toHaveProperty("msg_child_assistant");
+  expect(older.messageInfo).not.toHaveProperty("msg_nested_assistant");
   expect(native(events)).toEqual([]);
 });
 
@@ -402,7 +404,7 @@ test("routes metadata, supplied permission views and Run lifecycle to their spec
   expect(JSON.stringify(delivered)).not.toContain("Private run input");
 });
 
-test("attributes ordered child output to every ancestor and closes an interrupted invocation only once", async () => {
+test("attributes delegate lifecycle to every ancestor and keeps child content local", async () => {
   const f = await fixture();
   const result = await f.runtime.runPromise(
     collect(
@@ -445,34 +447,28 @@ test("attributes ordered child output to every ancestor and closes an interrupte
     ),
   );
   const delivered = native(result);
-  for (const { session } of [f.root, f.child]) {
-    const events = delivered
-      .filter((event) => event.sessionID === session.id)
-      .map(({ event }) => event);
-    expect(events.slice(0, 7).map((event) => event.type)).toEqual([
-      EventType.REASONING_START,
-      EventType.REASONING_MESSAGE_START,
-      EventType.REASONING_MESSAGE_CONTENT,
-      EventType.REASONING_MESSAGE_END,
-      EventType.REASONING_END,
-      EventType.STATE_DELTA,
-      EventType.STATE_DELTA,
-    ]);
-    expect(
-      events
-        .slice(0, 7)
-        .every((event) => event.subagentRunId === "prt_nested_proxy"),
-    ).toBe(true);
-    expect(
-      events.filter((event) => event.type === EventType.SUBAGENT_ERROR),
-    ).toEqual([
-      {
-        type: EventType.SUBAGENT_ERROR,
-        subagentRunId: "prt_nested_proxy",
-        message: "Cancelled",
-      },
-    ]);
-  }
+  // The child owns its proxy part, so it receives the full settlement; the
+  // grandparent observes lifecycle only, and nested content stays local.
+  expect(
+    delivered
+      .filter((event) => event.sessionID === f.child.session.id)
+      .map(({ event }) => event.type),
+  ).toEqual([
+    EventType.SUBAGENT_ERROR,
+    EventType.TOOL_CALL_RESULT,
+    EventType.ACTIVITY_DELTA,
+  ]);
+  expect(
+    delivered
+      .filter((event) => event.sessionID === f.root.session.id)
+      .map(({ event }) => event),
+  ).toEqual([
+    {
+      type: EventType.SUBAGENT_ERROR,
+      subagentRunId: "prt_nested_proxy",
+      message: "Cancelled",
+    },
+  ]);
   const local = delivered.filter(
     (event) => event.sessionID === f.nested.session.id,
   );
@@ -491,7 +487,7 @@ test("attributes ordered child output to every ancestor and closes an interrupte
   expect(local[0]!.event.metadata).not.toEqual({ mutated: true });
 });
 
-test("publishes a snapshot of the requested tree with local state, private inputs and lifecycle before open streams", async () => {
+test("publishes a snapshot with local content, lifecycle, and no descendant transcript", async () => {
   const f = await fixture();
   await f.runtime.runPromise(
     f.sessions.createPart({
@@ -526,12 +522,10 @@ test("publishes a snapshot of the requested tree with local state, private input
         .filter((message) => message.role === "user")
         .map((message) => message.id),
     ).toEqual([`msg_${conversation.session.title}_user`]);
+    // Descendant content opens in its own Session, never in the observer snapshot.
     expect(
       events[0].messages.find((message) => message.id === "prt_text"),
-    ).toMatchObject({
-      subagentRunId: "prt_nested_proxy",
-      content: "Partial answer",
-    });
+    ).toBeUndefined();
     expect(events[1]).toMatchObject({
       type: EventType.STATE_SNAPSHOT,
       snapshot: {
@@ -543,7 +537,6 @@ test("publishes a snapshot of the requested tree with local state, private input
           [`msg_${conversation.session.title}_user`]: {
             workspaceId: `wsp_${conversation.session.title}`,
           },
-          msg_nested_assistant: { completedAt: null, error: null },
         },
       },
     });
@@ -553,11 +546,8 @@ test("publishes a snapshot of the requested tree with local state, private input
     expect(starts).toHaveLength(index === 0 ? 2 : 1);
     expect(starts[0]).not.toHaveProperty("parentSubagentRunId");
     expect(events.slice(2, 2 + starts.length)).toEqual(starts);
-    expect(events.at(-1)).toMatchObject({
-      type: EventType.TEXT_MESSAGE_START,
-      messageId: "prt_text",
-      subagentRunId: "prt_nested_proxy",
-    });
+    // No descendant stream reopens here; the lifecycle is the final event.
+    expect(events.at(-1)?.type).toBe(EventType.SUBAGENT_STARTED);
   }
 });
 
@@ -601,8 +591,6 @@ test("rebuilds ancestor snapshots after a child input replacement without sharin
       {
         value: {
           msg_root_assistant: expect.any(Object),
-          msg_child_assistant: expect.any(Object),
-          msg_nested_assistant: expect.any(Object),
         },
       },
       { op: "add", path: "/history", value: { nextCursor: null } },

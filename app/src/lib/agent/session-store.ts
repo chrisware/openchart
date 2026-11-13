@@ -124,7 +124,7 @@ export function createSessionStore(
       // Release the observer's old result as well as the Query cache.
       history.setOptions(historyOptions());
     };
-    const publish = () => {
+    const refresh = () => {
       const result = history.getCurrentResult();
       live = {
         ...live,
@@ -142,7 +142,30 @@ export function createSessionStore(
         },
       };
       current = mergeTranscript(live, result.data?.pages ?? []);
+    };
+    let scheduled = false;
+    let trailing = false;
+    const flush = () => {
+      refresh();
       for (const listener of listeners) listener();
+    };
+    // Publish the first change immediately, then coalesce further changes in
+    // the same tick. A streamed delta no longer forces one projection per event.
+    const publish = () => {
+      if (!scheduled) {
+        flush();
+        scheduled = true;
+        queueMicrotask(() => {
+          scheduled = false;
+        });
+        return;
+      }
+      if (trailing) return;
+      trailing = true;
+      queueMicrotask(() => {
+        trailing = false;
+        flush();
+      });
     };
     agent.subscribe({
       // Snapshots authoritatively replace the latest complete-turn window. The SDK's default merge
@@ -248,7 +271,7 @@ export function createSessionStore(
             stopHistory = undefined;
             resetHistory();
             live = { ...live, loading: true };
-            publish();
+            flush();
           }
         };
       },
@@ -285,7 +308,7 @@ export function createSessionStore(
         resetHistory();
         live = { ...live, loading: true };
         listeners.clear();
-        publish();
+        flush();
       },
     };
   }

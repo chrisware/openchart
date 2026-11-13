@@ -10,7 +10,10 @@ import {
   type MessageCompletionTimes,
 } from "./assistant-ui-message-metadata";
 import { prepareCompactionMessages } from "./assistant-ui-compaction";
-import { convertMessagesWithUserParts } from "./assistant-ui-user-parts";
+import {
+  convertMessagesWithUserParts,
+  type MessageConversionCache,
+} from "./assistant-ui-user-parts";
 
 /**
  * Filters compaction summaries, converts user Parts through the library converter,
@@ -26,20 +29,20 @@ export function convertMessages(
   subagents: Readonly<Record<string, Subagent>> = {},
   messageInfo: MessageCompletionTimes = {},
   subagentRunId?: string,
+  conversionCache?: MessageConversionCache,
 ): ThreadMessageLike[] {
-  // Convert each invocation independently so child output stays under its tool.
-  const scoped = messages.filter(
-    (message) => message.subagentRunId === subagentRunId,
-  );
+  // Convert each invocation independently; index once instead of filtering
+  // the whole transcript for every projected invocation.
+  const scoped = indexMessages(messages).get(subagentRunId) ?? [];
   const compaction = prepareCompactionMessages(scoped, isRunning, messageInfo);
-  const converted = convertMessagesWithUserParts(compaction.messages);
+  const converted = convertMessagesWithUserParts(
+    compaction.messages,
+    conversionCache,
+  );
   const withCompaction = converted.map(compaction.addMetadata);
   const presented = attachToolDetails(
     withCompaction,
-    messages,
-    subagents,
-    messageInfo,
-    subagentRunId,
+    indexSubagents(subagents).get(subagentRunId),
   );
   return addMessageMetadata(
     presented,
@@ -70,12 +73,37 @@ function collectToolActivities(messages: readonly ThreadMessageLike[]) {
   return { activities, activityMessages };
 }
 
-function subagentPresentation(
-  child: Subagent,
-  messages: readonly Message[],
-  subagents: Readonly<Record<string, Subagent>>,
-  messageInfo: MessageCompletionTimes,
-) {
+/** Indexes messages by owning invocation once per projection. */
+function indexMessages(messages: readonly Message[]) {
+  const byRun = new Map<string | undefined, Message[]>();
+  for (const message of messages) {
+    const scoped = byRun.get(message.subagentRunId);
+    if (scoped) scoped.push(message);
+    else byRun.set(message.subagentRunId, [message]);
+  }
+  return byRun;
+}
+
+/** Indexes each subagent by its parent invocation and spawning tool call. */
+function indexSubagents(subagents: Readonly<Record<string, Subagent>>) {
+  const byParent = new Map<
+    string | undefined,
+    Map<string | undefined, Subagent>
+  >();
+  for (const child of Object.values(subagents)) {
+    const parent = child.start.parentSubagentRunId;
+    let children = byParent.get(parent);
+    if (children === undefined) {
+      children = new Map();
+      byParent.set(parent, children);
+    }
+    children.set(child.start.parentToolCallId, child);
+  }
+  return byParent;
+}
+
+/** Child transcripts open as their own conversations, so the root only needs lifecycle identity. */
+function subagentPresentation(child: Subagent) {
   const error =
     child.end?.type === EventType.SUBAGENT_ERROR
       ? child.end.message
@@ -89,29 +117,14 @@ function subagentPresentation(
     name: child.start.name,
     error,
     running,
-    messages: convertMessages(
-      messages,
-      running,
-      subagents,
-      messageInfo,
-      child.start.subagentRunId,
-    ),
   };
 }
 
 function attachToolDetails(
   converted: readonly ThreadMessageLike[],
-  messages: readonly Message[],
-  subagents: Readonly<Record<string, Subagent>>,
-  messageInfo: MessageCompletionTimes,
-  subagentRunId: string | undefined,
+  children: ReadonlyMap<string | undefined, Subagent> | undefined,
 ) {
   const { activities, activityMessages } = collectToolActivities(converted);
-  const children = new Map(
-    Object.values(subagents)
-      .filter(({ start }) => start.parentSubagentRunId === subagentRunId)
-      .map((child) => [child.start.parentToolCallId, child]),
-  );
   return converted
     .filter((message) => !activityMessages.has(message))
     .map((message) => {
@@ -123,15 +136,14 @@ function attachToolDetails(
         if (part.type !== "tool-call") continue;
         const activity = activities.get(part.toolCallId);
         if (activity) toolActivities[part.toolCallId] = activity;
-        const child = children.get(part.toolCallId);
-        if (child)
-          toolSubagents[part.toolCallId] = subagentPresentation(
-            child,
-            messages,
-            subagents,
-            messageInfo,
-          );
+        const child = children?.get(part.toolCallId);
+        if (child) toolSubagents[part.toolCallId] = subagentPresentation(child);
       }
+      if (
+        Object.keys(toolActivities).length === 0 &&
+        Object.keys(toolSubagents).length === 0
+      )
+        return message;
       return {
         ...message,
         metadata: {

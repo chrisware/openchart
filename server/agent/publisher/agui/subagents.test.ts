@@ -162,6 +162,7 @@ test.each(["success", "failure"])(
             ? { type: EventType.RUN_ERROR, message: "Connection lost" }
             : { type: EventType.RUN_FINISHED, threadId: rootID, runId: "run" },
         ];
+
         const verified = new (class extends AbstractAgent {
           /** Runs the real projected events through the native verifier. @example agent.run(); */
           run() {
@@ -184,28 +185,36 @@ test.each(["success", "failure"])(
         const starts = native.filter(
           (event) => event.type === EventType.SUBAGENT_STARTED,
         );
-        for (const start of starts)
-          expect(
-            native
-              .filter(
-                (event) =>
-                  ((event.type === EventType.TOOL_CALL_START ||
-                    event.type === EventType.TOOL_CALL_RESULT) &&
-                    event.toolCallId === start.parentToolCallId) ||
-                  ((event.type === EventType.SUBAGENT_STARTED ||
-                    event.type === EventType.SUBAGENT_FINISHED ||
-                    event.type === EventType.SUBAGENT_ERROR) &&
-                    event.subagentRunId === start.subagentRunId),
-              )
-              .map((event) => event.type),
-          ).toEqual([
-            EventType.TOOL_CALL_START,
-            EventType.SUBAGENT_STARTED,
-            outcome === "failure"
-              ? EventType.SUBAGENT_ERROR
-              : EventType.SUBAGENT_FINISHED,
-            EventType.TOOL_CALL_RESULT,
-          ]);
+        const terminal =
+          outcome === "failure"
+            ? EventType.SUBAGENT_ERROR
+            : EventType.SUBAGENT_FINISHED;
+        for (const start of starts) {
+          const types = native
+            .filter(
+              (event) =>
+                ((event.type === EventType.TOOL_CALL_START ||
+                  event.type === EventType.TOOL_CALL_RESULT) &&
+                  event.toolCallId === start.parentToolCallId) ||
+                ((event.type === EventType.SUBAGENT_STARTED ||
+                  event.type === EventType.SUBAGENT_FINISHED ||
+                  event.type === EventType.SUBAGENT_ERROR) &&
+                  event.subagentRunId === start.subagentRunId),
+            )
+            .map((event) => event.type);
+          // A nested delegate's proxy lives in its parent Session; the root
+          // observer receives lifecycle only.
+          expect(types).toEqual(
+            start.parentSubagentRunId === undefined
+              ? [
+                  EventType.TOOL_CALL_START,
+                  EventType.SUBAGENT_STARTED,
+                  terminal,
+                  EventType.TOOL_CALL_RESULT,
+                ]
+              : [EventType.SUBAGENT_STARTED, terminal],
+          );
+        }
         const alpha = starts.find(
           (event) => event.parentToolCallId === "alpha",
         )!;
@@ -290,14 +299,12 @@ test.each(["success", "failure"])(
               ).toHaveLength(3),
             );
             const live = session.getSnapshot();
+            // Delegate content opens in its own Session, not the root snapshot.
             expect(
               live.messages.filter(
-                (message) =>
-                  message.subagentRunId !== undefined &&
-                  message.role === "assistant" &&
-                  message.content,
+                (message) => message.subagentRunId !== undefined,
               ),
-            ).toHaveLength(3);
+            ).toEqual([]);
             detach();
             detach = session.subscribe(() => {});
             sendSnapshot(completed);
